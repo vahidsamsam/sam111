@@ -143,7 +143,7 @@ async function loadMarkets() {
   setStatus(true);
 }
 function indexMarkets(list) {
-  list.forEach(c => { state.byId[c.id] = c; if (!state.bySym[c.symbol] || state.bySym[c.symbol].market_cap_rank > c.market_cap_rank) state.bySym[c.symbol] = c; });
+  list.forEach(c => { state.byId[c.id] = c; const p = state.bySym[c.symbol]; if (!p || p.id === c.id || (p.market_cap_rank || 1e9) > (c.market_cap_rank || 1e9)) state.bySym[c.symbol] = c; });
 }
 async function loadPortfolioCoins() {
   const ids = Object.values(TIERS).flatMap(t => t.ids).join(',');
