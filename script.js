@@ -1079,8 +1079,13 @@ double CalcLots(){
   const body5 = `#include <Trade/Trade.mqh>
 CTrade trade;
 int OnInit(){ trade.SetExpertMagicNumber(InpMagic); return(INIT_SUCCEEDED); }
+bool HasOpen(){
+   for(int i = PositionsTotal() - 1; i >= 0; i--){ ulong tk = PositionGetTicket(i); if(tk > 0 && PositionGetInteger(POSITION_MAGIC) == InpMagic && PositionGetString(POSITION_SYMBOL) == InpSymbol) return true; }
+   return false;
+}
 void OnTick(){
    if(done) return;
+   if(HasOpen()){ done = true; return; }
    double point = SymbolInfoDouble(InpSymbol, SYMBOL_POINT);
    double ask = SymbolInfoDouble(InpSymbol, SYMBOL_ASK), bid = SymbolInfoDouble(InpSymbol, SYMBOL_BID);
    double lots = CalcLots();
@@ -1092,8 +1097,13 @@ void OnTick(){
 }
 `;
   const body4 = `int OnInit(){ return(INIT_SUCCEEDED); }
+bool HasOpen(){
+   for(int i = OrdersTotal() - 1; i >= 0; i--) if(OrderSelect(i, SELECT_BY_POS, MODE_TRADES) && OrderMagicNumber() == InpMagic && OrderSymbol() == InpSymbol) return true;
+   return false;
+}
 void OnTick(){
    if(done) return;
+   if(HasOpen()){ done = true; return; }
    double point = MarketInfo(InpSymbol, MODE_POINT);
    double ask = MarketInfo(InpSymbol, MODE_ASK), bid = MarketInfo(InpSymbol, MODE_BID);
    double lots = CalcLots();
