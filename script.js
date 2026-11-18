@@ -1594,7 +1594,7 @@ function liveCandle(sym) {
   let pushed = false;
   if (step > 0 && Date.now() >= last.t + step) { d.push({ t: last.t + Math.floor((Date.now() - last.t) / step) * step, o: last.c, h: Math.max(last.c, l.c), l: Math.min(last.c, l.c), c: l.c, v: 0 }); if (d.length > 1500) d.shift(); pushed = true; }
   else { last.c = l.c; last.h = Math.max(last.h, l.c); last.l = Math.min(last.l, l.c); }
-  if (lwc && !$('#lwc').hidden) { const x = d[d.length - 1]; if (pushed) lwcRender(); else { lwc.candle.update({ time: tt(x), open: x.o, high: x.h, low: x.l, close: x.c }); lwcLegend(x); } }
+  if (lwc && !$('#lwc').hidden) { const x = d[d.length - 1]; if (pushed || Date.now() - (liveCandle.full || 0) > 10000) { liveCandle.full = Date.now(); lwcRender(); } else { lwc.candle.update({ time: tt(x), open: x.o, high: x.h, low: x.l, close: x.c }); lwcLegend(x); } }
   else if (!liveCandle.t || Date.now() - liveCandle.t > 1000) { liveCandle.t = Date.now(); drawChartCanvas(); }
 }
 const TV_STUDY = { MA: 'STD;SMA', EMA: 'STD;EMA', BB: 'STD;Bollinger_Bands', RSI: 'STD;RSI', MACD: 'STD;MACD' };
