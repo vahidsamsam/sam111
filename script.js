@@ -672,7 +672,7 @@ function checkPriceAlerts(sym) {
   if (changed) { store.set('alerts', state.alerts); renderAlertList(); }
 }
 function renderAlertList() {
-  $('#alertList').innerHTML = state.alerts.length ? state.alerts.map((a, i) => `<li><span>${a.done ? '✅' : '⏳'} <b>${a.sym}</b> ${a.cond === 'above' ? 'بالاتر از' : 'پایین‌تر از'} <b class="ltr">${fmtUsd(a.price)}</b> ${a.note ? '<small class="muted">' + esc(a.note) + '</small>' : ''} <small class="muted ltr">(اکنون ${fmtUsd(priceOf(a.sym))})</small></span><button class="btn sm ghost" data-del="${i}">حذف</button></li>`).join('') : '<li class="muted">هشداری تعریف نشده.</li>';
+  $('#alertList').innerHTML = state.alerts.length ? state.alerts.map((a, i) => `<li><span>${a.done ? '✅' : '⏳'} <b>${esc(a.sym)}</b> ${a.cond === 'above' ? 'بالاتر از' : 'پایین‌تر از'} <b class="ltr">${fmtUsd(a.price)}</b> ${a.note ? '<small class="muted">' + esc(a.note) + '</small>' : ''} <small class="muted ltr">(اکنون ${fmtUsd(priceOf(a.sym))})</small></span><button class="btn sm ghost" data-del="${i}">حذف</button></li>`).join('') : '<li class="muted">هشداری تعریف نشده.</li>';
   $$('#alertList [data-del]').forEach(b => b.onclick = () => { state.alerts.splice(+b.dataset.del, 1); store.set('alerts', state.alerts); renderAlertList(); });
 }
 
@@ -1127,6 +1127,7 @@ function tradePnl(j) {
   if (!j.exit) return null;
   return (j.side === 'short' ? -1 : 1) * (j.exit - j.entry) * j.qty * (j.lev || 1) - (j.fee || 0);
 }
+const safeImg = v => typeof v === 'string' && /^data:image\/(png|jpe?g|webp|gif);base64,[A-Za-z0-9+/=]+$/.test(v) ? v : '';
 let journal = [];
 async function loadJournal() { try { journal = (await idb.all()).sort((a, b) => b.date.localeCompare(a.date)); } catch { journal = store.get('journalFallback', []); } renderJournal(); }
 async function addJournal(e) {
@@ -1150,7 +1151,7 @@ function renderJournal() {
   $('#jTable tbody').innerHTML = journal.length ? journal.map(j => { const p = tradePnl(j); return `<tr><td>${j.date ? faDate(j.date) : ''}</td><td><b>${esc(j.sym)}</b></td><td class="${j.side === 'long' ? 'up' : 'down'}">${j.side === 'long' ? 'لانگ' : 'شورت'}${j.lev > 1 ? ' ×' + toFa(j.lev) : ''}</td>
     <td class="num">${fmtNum(j.entry)}</td><td class="num">${j.exit ? fmtNum(j.exit) : 'باز'}</td><td class="num">${fmtNum(j.qty, 6)}</td><td class="num ${pctCls(p)}">${p != null ? fmtUsd(p, 2) : '—'}</td><td>${esc(j.emotion)}</td><td>${'★'.repeat(j.rate || 0)}</td>
     <td style="white-space:normal;max-width:260px">${esc(j.reason)}${j.lesson ? `<br><small class="muted">درس: ${esc(j.lesson)}</small>` : ''}</td>
-    <td>${j.imgBefore ? `<img class="thumb" src="${j.imgBefore}" title="قبل" alt="قبل">` : ''}${j.imgAfter ? `<img class="thumb" src="${j.imgAfter}" title="بعد" alt="بعد">` : ''}</td>
+    <td>${safeImg(j.imgBefore) ? `<img class="thumb" src="${safeImg(j.imgBefore)}" title="قبل" alt="قبل">` : ''}${safeImg(j.imgAfter) ? `<img class="thumb" src="${safeImg(j.imgAfter)}" title="بعد" alt="بعد">` : ''}</td>
     <td class="no-print"><button class="btn sm ghost" data-jdel="${j.id}">حذف</button></td></tr>`; }).join('') : '<tr><td colspan="12" class="muted">هنوز تریدی ثبت نشده است.</td></tr>';
   $$('[data-jdel]').forEach(b => b.onclick = async () => { if (!confirm('این ترید حذف شود؟')) return; try { await idb.del(+b.dataset.jdel); } catch { } loadJournal(); });
   $$('#jTable .thumb').forEach(im => im.onclick = () => { $('#imgModal img').src = im.src; $('#imgModal').hidden = false; });
@@ -1264,7 +1265,7 @@ function buildReport() {
   const tierRows = Object.entries(TIERS).flatMap(([k, t]) => t.ids.map(id => state.byId[id]).filter(Boolean).map(c => `<tr><td>${k === 'blue' ? 'Blue-chip' : k === 'mid' ? 'Mid-cap' : 'Moonshot'}</td><td>${c.symbol.toUpperCase()}</td><td class="num">${fmtUsd(c.current_price)}</td><td class="num">${fmtPct(c.price_change_percentage_7d_in_currency, 1)}</td><td class="num">${fmtPct(c.ath_change_percentage, 0)}</td><td>${toFa(t.weight / 5)}٪</td><td class="num">${fmtUsd(projectPrice(c, k, 12))}</td></tr>`)).join('');
   $('#reportDoc').innerHTML = `<div class="rp">
     <div class="rp-h"><div><h2>${esc($('#rpTitle').value)}</h2><div>بازه: ${new Date(weekAgo).toLocaleDateString('fa-IR')} تا ${new Date(now).toLocaleDateString('fa-IR')}</div><div>تهیه‌کننده: <b>${esc(name)}</b></div></div>
-      ${rpLogo ? `<img src="${rpLogo}" alt="logo">` : '<img src="icon.svg" alt="logo" style="height:60px"><b style="color:#a8730d">هوش‌مانیتور پرو</b>'}</div>
+      ${safeImg(rpLogo) ? `<img src="${safeImg(rpLogo)}" alt="logo">` : '<img src="icon.svg" alt="logo" style="height:60px"><b style="color:#a8730d">هوش‌مانیتور پرو</b>'}</div>
     <h3>۱. خلاصه بازار</h3><table><tr><th>شاخص</th><th>مقدار</th><th>شاخص</th><th>مقدار</th></tr>
       <tr><td>بیت‌کوین</td><td class="num">${fmtUsd(btc?.current_price)} (${fmtPct(btc?.price_change_percentage_7d_in_currency, 1)} هفتگی)</td><td>اتریوم</td><td class="num">${fmtUsd(eth?.current_price)} (${fmtPct(eth?.price_change_percentage_7d_in_currency, 1)})</td></tr>
       <tr><td>دامیننس BTC</td><td class="num">${state.global ? state.global.market_cap_percentage.btc.toFixed(2) + '%' : '—'}</td><td>ارزش کل بازار</td><td class="num">${state.global ? fmtBig(state.global.total_market_cap.usd) : '—'}</td></tr>
