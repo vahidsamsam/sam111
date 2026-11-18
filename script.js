@@ -1072,7 +1072,8 @@ double CalcLots(){
    double step = SymbolInfoDouble(InpSymbol, SYMBOL_VOLUME_STEP);
    double mn = SymbolInfoDouble(InpSymbol, SYMBOL_VOLUME_MIN), mx = SymbolInfoDouble(InpSymbol, SYMBOL_VOLUME_MAX);
    lots = MathFloor(lots / step) * step;
-   return MathMax(mn, MathMin(mx, lots));
+   if(lots < mn){ Print("HooshMonitor: risk budget below minimum volume, order skipped"); return 0; }
+   return MathMin(mx, lots);
 }
 `;
   const body5 = `#include <Trade/Trade.mqh>
@@ -1083,6 +1084,7 @@ void OnTick(){
    double point = SymbolInfoDouble(InpSymbol, SYMBOL_POINT);
    double ask = SymbolInfoDouble(InpSymbol, SYMBOL_ASK), bid = SymbolInfoDouble(InpSymbol, SYMBOL_BID);
    double lots = CalcLots();
+   if(lots <= 0){ done = true; return; }
    bool ok = InpBuy ? trade.Buy(lots, InpSymbol, ask, ask - InpSLPoints*point, ask + InpTPPoints*point, "HooshMonitor")
                     : trade.Sell(lots, InpSymbol, bid, bid + InpSLPoints*point, bid - InpTPPoints*point, "HooshMonitor");
    if(ok){ done = true; Print("HooshMonitor order sent, lots=", lots); }
@@ -1095,6 +1097,7 @@ void OnTick(){
    double point = MarketInfo(InpSymbol, MODE_POINT);
    double ask = MarketInfo(InpSymbol, MODE_ASK), bid = MarketInfo(InpSymbol, MODE_BID);
    double lots = CalcLots();
+   if(lots <= 0){ done = true; return; }
    int t = InpBuy ? OrderSend(InpSymbol, OP_BUY, lots, ask, 30, ask - InpSLPoints*point, ask + InpTPPoints*point, "HooshMonitor", InpMagic, 0, clrGreen)
                   : OrderSend(InpSymbol, OP_SELL, lots, bid, 30, bid + InpSLPoints*point, bid - InpTPPoints*point, "HooshMonitor", InpMagic, 0, clrRed);
    if(t > 0){ done = true; Print("HooshMonitor order sent #", t); }
