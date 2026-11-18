@@ -1760,11 +1760,12 @@ function queueTr(node, prop) {
   if (!trQ.has(s)) trQ.set(s, []); trQ.get(s).push(set); clearTimeout(trTimer); trTimer = setTimeout(flushTr, 200);
 }
 function trWalk(root) {
-  if (root.nodeType === 3) { if (FA_RE.test(root.nodeValue)) queueTr(root, 'nodeValue'); return; }
-  if (root.nodeType !== 1 || root.closest('script,style,.no-tr')) return;
+  const PRIV = 'script,style,.no-tr,#chatLog,#sec-journal,#sec-trade,#sec-settings';
+  if (root.nodeType === 3) { if (FA_RE.test(root.nodeValue) && !(root.parentElement && root.parentElement.closest(PRIV))) queueTr(root, 'nodeValue'); return; }
+  if (root.nodeType !== 1 || root.closest(PRIV)) return;
   const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT);
   for (let n = root; n; n = w.nextNode()) {
-    if (n.nodeType === 3) { if (FA_RE.test(n.nodeValue) && !n.parentElement.closest('script,style')) queueTr(n, 'nodeValue'); }
+    if (n.nodeType === 3) { if (FA_RE.test(n.nodeValue) && !n.parentElement.closest('script,style,.no-tr,#chatLog,#sec-journal,#sec-trade,#sec-settings')) queueTr(n, 'nodeValue'); }
     else ['placeholder', 'title', 'aria-label'].forEach(a => { if (FA_RE.test(n.getAttribute(a) || '')) queueTr(n, a); });
   }
 }
@@ -1850,7 +1851,7 @@ function startTour(i = 0) {
 
 async function init2() {
   applyLang();
-  $('#langBtn').onclick = () => { store.set('lang', LANG.cur === 'en' ? 'fa' : 'en'); location.reload(); };
+  $('#langBtn').onclick = () => { if (LANG.cur !== 'en' && !confirm('حالت انگلیسی متن‌های رابط سایت را با Google Translate ترجمه می‌کند (چت، ژورنال، صرافی و تنظیمات ارسال نمی‌شوند). ادامه می‌دهید؟\nEnglish mode translates interface text via Google Translate. Continue?')) return; store.set('lang', LANG.cur === 'en' ? 'fa' : 'en'); location.reload(); };
   $('#helpBtn').onclick = () => startTour(0);
   bindWatch(); bindNewsPop(); addSectionHelp(); renderWatch();
   const gl = deb(() => applyGlossary($('#main')), 700); gl(); new MutationObserver(gl).observe($('#main'), { childList: true, subtree: true });
