@@ -998,8 +998,8 @@ function openPaper({ sym, side, amount, lev = 1, sl = 0, tp = 0, src = 'دستی
   if (!price) return toast('قیمت لحظه‌ای ' + sym + ' در دسترس نیست', 'err');
   amount = +amount; lev = clamp(+lev || 1, 1, 50);
   if (!(amount > 0)) return toast('مبلغ نامعتبر است', 'err');
-  if (amount > state.paper.balance) return toast('موجودی حساب آزمایشی کافی نیست', 'err');
   const fee = amount * lev * 0.001;
+  if (amount + fee > state.paper.balance) return toast('موجودی حساب آزمایشی (با کارمزد) کافی نیست', 'err');
   state.paper.balance -= amount + fee;
   state.paper.positions.push({ id: Date.now() + Math.random(), sym, side, entry: price, qty: amount * lev / price, lev, margin: amount, sl: +sl || 0, tp: +tp || 0, t: Date.now(), src, fee });
   savePaper(); renderPaper(); toast(`سفارش آزمایشی ${side === 'long' ? 'خرید' : 'فروش'} ${sym} با قیمت ${fmtUsd(price)} اجرا شد`, 'ok');
