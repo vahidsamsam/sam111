@@ -1566,7 +1566,7 @@ function lwcRender(fit) {
   const L = lwc, c = d.map(x => x.c), time = d.map(tt);
   L.candle.setData(d.map((x, i) => ({ time: time[i], open: x.o, high: x.h, low: x.l, close: x.c })));
   L.over.forEach(s => L.main.removeSeries(s)); L.subS.forEach(s => L.sub.removeSeries(s)); L.over = []; L.subS = [];
-  const line = (chart, arr, color, w, bag) => { const s = chart.addLineSeries({ color, lineWidth: w, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false }); s.setData(arr.map((v, i) => v == null || !isFinite(v) ? null : { time: time[i], value: v }).filter(Boolean)); bag.push(s); return s; };
+  const line = (chart, arr, color, w, bag) => { const s = chart.addLineSeries({ color, lineWidth: w, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false }); s.setData(arr.map((v, i) => v == null || !isFinite(v) ? { time: time[i] } : { time: time[i], value: v })); bag.push(s); return s; };
   let hasSub = false;
   state.ind.forEach((ind, k) => {
     const col = IND_COLORS[k % IND_COLORS.length], p = ind.p.map(Number);
@@ -1578,7 +1578,7 @@ function lwcRender(fit) {
     if (ind.t === 'MACD') {
       hasSub = true; const ef = ema(c, p[0]), es = ema(c, p[1]), m = c.map((_, i) => ef[i] != null && es[i] != null ? ef[i] - es[i] : null);
       const f = m.findIndex(v => v != null), sg = Array(c.length).fill(null); if (f >= 0) ema(m.slice(f), p[2]).forEach((v, j) => sg[f + j] = v);
-      const h = L.sub.addHistogramSeries({ priceLineVisible: false, lastValueVisible: false }); h.setData(m.map((v, i) => v == null || sg[i] == null ? null : { time: time[i], value: v - sg[i], color: v - sg[i] >= 0 ? 'rgba(34,197,94,.5)' : 'rgba(239,68,68,.5)' }).filter(Boolean)); L.subS.push(h);
+      const h = L.sub.addHistogramSeries({ priceLineVisible: false, lastValueVisible: false }); h.setData(m.map((v, i) => v == null || sg[i] == null ? { time: time[i] } : { time: time[i], value: v - sg[i], color: v - sg[i] >= 0 ? 'rgba(34,197,94,.5)' : 'rgba(239,68,68,.5)' })); L.subS.push(h);
       line(L.sub, m, '#38bdf8', 1.5, L.subS); line(L.sub, sg, '#fb923c', 1.5, L.subS);
     }
   });
