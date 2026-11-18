@@ -1467,7 +1467,8 @@ async function loadWide() {
   const all = await getJSON(`${CG}/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=1&sparkline=true&price_change_percentage=1h,24h,7d,30d`, {}, 20000).catch(() => []);
   if (!all.length) return;
   state.wide = all.filter(c => !STABLES.has(c.symbol));
-  all.forEach(c => { state.byId[c.id] = state.byId[c.id] || c; if (!state.bySym[c.symbol]) state.bySym[c.symbol] = c; });
+  const main = new Set((state.allMarkets || []).map(c => c.id));
+  all.forEach(c => { if (main.has(c.id)) return; state.byId[c.id] = c; const p = state.bySym[c.symbol]; if (!p || p.id === c.id) state.bySym[c.symbol] = c; });
 }
 const METALS = { XAU: ['طلا (انس)', 'OANDA:XAUUSD'], XAG: ['نقره', 'OANDA:XAGUSD'], XPT: ['پلاتین', 'OANDA:XPTUSD'], XPD: ['پالادیوم', 'OANDA:XPDUSD'], HG: ['مس', 'COMEX:HG1!'] };
 const FX_PAIRS = ['EURUSD', 'GBPUSD', 'USDJPY', 'USDCHF', 'AUDUSD', 'USDCAD', 'NZDUSD', 'EURGBP', 'EURJPY', 'USDCNY', 'USDTRY'];
