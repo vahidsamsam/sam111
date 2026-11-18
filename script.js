@@ -1142,12 +1142,13 @@ function tradePnl(j) {
 }
 const safeImg = v => typeof v === 'string' && /^data:image\/(png|jpe?g|webp|gif);base64,[A-Za-z0-9+/=]+$/.test(v) ? v : '';
 let journal = [];
-async function loadJournal() { try { journal = (await idb.all()).sort((a, b) => b.date.localeCompare(a.date)); } catch { journal = store.get('journalFallback', []); } renderJournal(); }
+async function loadJournal() { let db = []; try { db = await idb.all(); } catch { } const ids = new Set(db.map(j => j.id)); journal = db.concat(store.get('journalFallback', []).filter(j => !ids.has(j.id))).sort((a, b) => (b.date || '').localeCompare(a.date || '')); renderJournal(); }
+async function saveJournalEntry(entry) { try { await idb.put(entry); } catch { const f = store.get('journalFallback', []); f.push(entry); store.set('journalFallback', f); if (!store.get('journalFallback', []).some(j => j.id === entry.id)) { toast('ذخیره ژورنال ناموفق بود (حافظه مرورگر)', 'err'); return false; } } return true; }
 async function addJournal(e) {
   const n = id => parseFloat(toEn($('#' + id).value)) || 0;
   const entry = { id: Date.now(), date: $('#jDate').value, sym: $('#jSym').value.toUpperCase().trim(), side: $('#jSide').value, lev: n('jLev') || 1, entry: n('jEntry'), exit: n('jExit') || null, qty: n('jQty'), fee: n('jFee'), sl: n('jSL') || null, tp: n('jTP') || null, emotion: $('#jEmotion').value, rate: +$('#jRate').value, reason: $('#jReason').value.trim(), lesson: $('#jLesson').value.trim(),
     imgBefore: await compressImage($('#jImgBefore').files[0]), imgAfter: await compressImage($('#jImgAfter').files[0]) };
-  try { await idb.put(entry); } catch { const f = store.get('journalFallback', []); f.push(entry); store.set('journalFallback', f); }
+  if (!(await saveJournalEntry(entry))) return;
   $('#jForm').reset(); setNow(); toast('ترید در ژورنال ثبت شد 📒', 'ok'); loadJournal();
 }
 function setNow() { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); $('#jDate').value = d.toISOString().slice(0, 16); }
@@ -1166,7 +1167,7 @@ function renderJournal() {
     <td style="white-space:normal;max-width:260px">${esc(j.reason)}${j.lesson ? `<br><small class="muted">درس: ${esc(j.lesson)}</small>` : ''}</td>
     <td>${safeImg(j.imgBefore) ? `<img class="thumb" src="${safeImg(j.imgBefore)}" title="قبل" alt="قبل">` : ''}${safeImg(j.imgAfter) ? `<img class="thumb" src="${safeImg(j.imgAfter)}" title="بعد" alt="بعد">` : ''}</td>
     <td class="no-print"><button class="btn sm ghost" data-jdel="${j.id}">حذف</button></td></tr>`; }).join('') : '<tr><td colspan="12" class="muted">هنوز تریدی ثبت نشده است.</td></tr>';
-  $$('[data-jdel]').forEach(b => b.onclick = async () => { if (!confirm('این ترید حذف شود؟')) return; try { await idb.del(+b.dataset.jdel); } catch { } loadJournal(); });
+  $$('[data-jdel]').forEach(b => b.onclick = async () => { if (!confirm('این ترید حذف شود؟')) return; try { await idb.del(+b.dataset.jdel); } catch { } store.set('journalFallback', store.get('journalFallback', []).filter(j => j.id !== +b.dataset.jdel)); loadJournal(); });
   $$('#jTable .thumb').forEach(im => im.onclick = () => { $('#imgModal img').src = im.src; $('#imgModal').hidden = false; });
 }
 function journalCSV() {
@@ -1178,7 +1179,7 @@ async function addToJournalFromCalc() {
   const r = calcCompute(); if (!r) return toast('ابتدا ماشین‌حساب را پر کنید', 'err');
   const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
   const e = { id: Date.now(), date: d.toISOString().slice(0, 16), sym: r.coin, side: r.mode === 'short' ? 'short' : 'long', lev: r.lev, entry: r.entry, exit: null, qty: +r.qtyCalc.toPrecision(6), fee: +(r.position * r.fee).toFixed(2), sl: r.stop || null, tp: r.exit || null, emotion: 'آرام و منطقی', rate: 3, reason: `ثبت از ماشین‌حساب — R:R ${r.rr ? r.rr.toFixed(2) : '—'}`, lesson: '' };
-  try { await idb.put(e); } catch { }
+  if (!(await saveJournalEntry(e))) return;
   toast('ترید در ژورنال ثبت شد 📒', 'ok'); loadJournal();
 }
 
