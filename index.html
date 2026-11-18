@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>هوش‌مانیتور پرو | نظارت لحظه‌ای بازار</title>
+<meta name="description" content="داشبورد فارسی نظارت لحظه‌ای کریپتو، طلا، نفت و فارکس">
+<meta name="theme-color" content="#0b1220">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon.svg">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="topbar no-print">
+  <button class="icon-btn" id="menuBtn" aria-label="منو">☰</button>
+  <div class="brand"><img src="icon.svg" alt="" width="34" height="34"><div><b>هوش‌مانیتور پرو</b><small>نظارت لحظه‌ای کریپتو، طلا، نفت و فارکس</small></div></div>
+  <div class="top-actions">
+    <span class="status" id="netStatus" title="وضعیت اتصال داده"><i></i><span>در حال اتصال…</span></span>
+    <span class="rate-chip" id="rateChip" title="نرخ دلار (تتر) به تومان">دلار: —</span>
+    <div class="seg" id="currencySeg"><button data-cur="usd" class="active">دلار</button><button data-cur="irt">تومان</button></div>
+    <button class="icon-btn lang" id="langBtn" title="English / فارسی">EN</button><button class="icon-btn" id="helpBtn" title="راهنمای سریع">؟</button>
+    <button class="icon-btn" id="installBtn" hidden title="نصب روی گوشی">⤓</button>
+  </div>
+</header>
+
+<div class="ticker no-print"><div class="ticker-track" id="tickerTrack"></div></div>
+
+<div class="layout">
+<nav class="sidebar no-print" id="sidebar">
+  <a data-sec="dash" class="active">📊 داشبورد بازار</a>
+  <a data-sec="chart">📈 چارت و اندیکاتور</a>
+  <a data-sec="advisor">🤖 مشاور هوش مصنوعی</a>
+  <a data-sec="calc">🧮 ماشین‌حساب حرفه‌ای</a>
+  <a data-sec="forecast">🔮 سبد، سیگنال و پیش‌بینی</a>
+  <a data-sec="trade">🔌 صرافی و ترید آزمایشی</a>
+  <a data-sec="alerts">🔔 هشدارها و تلگرام</a>
+  <a data-sec="journal">📒 ژورنال معاملاتی</a>
+  <a data-sec="backtest">🧪 بک‌تست و کارنامه</a>
+  <a data-sec="onchain">⛓️ آن‌چین و سنتیمنت</a>
+  <a data-sec="report">📄 گزارش PDF هفتگی</a>
+  <a data-sec="settings">⚙️ تنظیمات</a>
+  <p class="side-note">داده‌ها از منابع عمومی و رایگان خوانده می‌شوند. این ابزار توصیه مالی نیست.</p>
+</nav>
+
+<main id="main">
+
+<!-- ============ DASHBOARD ============ -->
+<section id="sec-dash" class="sec active">
+  <div class="card">
+    <div class="card-h wrap"><h3>⭐ واچ‌لیست من</h3>
+      <div class="row gap wrap"><div class="seg sm" id="wlTabs"><button data-g="all" class="active">همه</button><button data-g="crypto">کریپتو</button><button data-g="metal">فلزات</button><button data-g="fx">فارکس</button></div>
+      <select class="input sm" id="wlAdd" title="افزودن به واچ‌لیست"></select><button class="btn sm ghost" id="wlReset" title="بازگشت به ارزهای اصلی">پیش‌فرض</button></div></div>
+    <div class="wl" id="watchlist"></div>
+    <p class="hint">روی هر کارت بزنید تا چارت آن باز شود. با ✕ حذف و با «افزودن» ارز، فلز یا جفت‌ارز دلخواه اضافه کنید.</p>
+  </div>
+  <div class="grid two">
+    <div class="card"><div class="card-h"><h3>🚀 بیشترین رشد ۲۴ ساعت</h3><small>از ۲۵۰ ارز برتر</small></div><ul class="movers" id="gainers"><li class="muted">در حال دریافت…</li></ul></div>
+    <div class="card"><div class="card-h"><h3>📉 بیشترین افت ۲۴ ساعت</h3><small>از ۲۵۰ ارز برتر</small></div><ul class="movers" id="losers"><li class="muted">در حال دریافت…</li></ul></div>
+  </div>
+  <div class="grid top5" id="top5"></div>
+
+  <div class="grid two">
+    <div class="card">
+      <div class="card-h"><h3>💧 جریان نقدینگی</h3><small>همیشه کنار چارت بیت‌کوین</small></div>
+      <div class="liq" id="liqDash"></div>
+    </div>
+    <div class="card">
+      <div class="card-h"><h3>⚡ هشدارهای لحظه‌ای</h3><div class="row gap"><small id="monitorInfo">حجم، نهنگ، خبر</small><button class="btn sm ghost" id="clearFeed">پاک کردن</button></div></div>
+      <ul class="feed" id="alertFeed"><li class="muted">هنوز هشداری ثبت نشده است. پایش هر ۶۰ ثانیه انجام می‌شود.</li></ul>
+    </div>
+  </div>
+
+  <div class="grid two">
+    <div class="card">
+      <div class="card-h"><h3>📉 فیوچرز (OKX)</h3><small>Funding Rate، Open Interest، نسبت لانگ/شورت</small></div>
+      <div class="kv" id="futuresBox"></div>
+      <h4 class="mt">آخرین لیکوییدیشن‌های BTC</h4>
+      <div id="liqMap" class="liqmap"></div>
+    </div>
+    <div class="card">
+      <div class="card-h"><h3>📰 اخبار لحظه‌ای</h3><small>CoinDesk، The Block، Cointelegraph</small></div>
+      <ul class="news" id="newsList"><li class="muted">در حال دریافت اخبار…</li></ul>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-h"><h3>🗓️ تقویم اقتصادی و بازارهای سنتی</h3><small>CPI، NFP، نرخ بهره فدرال رزرو، DXY، طلا، نفت</small></div>
+    <div class="grid two">
+      <div class="tv-wrap" id="tvCalendar"></div>
+      <div class="tv-wrap" id="tvTickers"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-h"><h3>🏆 ارزهای برتر بازار</h3><div class="row gap"><select class="input sm" id="tableSize"><option value="50">۵۰ ارز</option><option value="100">۱۰۰ ارز</option><option value="250">۲۵۰ ارز</option></select><input class="input sm" id="tableSearch" placeholder="جستجوی نماد یا نام…"></div></div>
+    <div class="table-wrap"><table class="tbl" id="marketTable">
+      <thead><tr><th>#</th><th>ارز</th><th>قیمت</th><th>۱ ساعت</th><th>۲۴ ساعت</th><th>۷ روز</th><th>حجم ۲۴ ساعت</th><th>ارزش بازار</th><th>فاصله از ATH</th><th>نمودار ۷ روز</th></tr></thead>
+      <tbody></tbody></table></div>
+  </div>
+</section>
+
+<!-- ============ CHART ============ -->
+<section id="sec-chart" class="sec">
+  <div class="card">
+    <div class="card-h wrap">
+      <div class="row gap wrap">
+        <select class="input" id="chartSymbol">
+          <option value="BTCUSDT">BTC بیت‌کوین</option><option value="ETHUSDT">ETH اتریوم</option><option value="SOLUSDT">SOL سولانا</option>
+          <option value="XRPUSDT">XRP ریپل</option><option value="BNBUSDT">BNB بایننس‌کوین</option><option value="DOGEUSDT">DOGE دوج‌کوین</option>
+          <option value="PAXGUSDT">طلا (انس – PAXG)</option><option value="OIL">نفت WTI / برنت</option>
+        </select>
+        <div class="seg tf" id="tfSeg"><button data-tf="1m">1m</button><button data-tf="5m">5m</button><button data-tf="15m">15m</button><button data-tf="1h">1H</button><button data-tf="4h" class="active">4H</button><button data-tf="1d">1D</button><button data-tf="1w">1W</button></div>
+      </div>
+      <div class="row gap wrap">
+        <div class="ind-bar" id="indBar"></div><span hidden><input type="checkbox" id="indMA" checked>
+        <input type="checkbox" id="indBB" checked>
+        <input type="checkbox" id="indRSI" checked></span>
+        <button class="btn sm ghost" id="tvToggle" title="نسخه کامل TradingView با همه ابزارها">TradingView کامل</button>
+      </div>
+    </div>
+    <div class="chart-layout">
+      <div class="chart-box">
+        <div class="chart-legend" id="chartLegend"></div>
+        <div id="lwc" class="lwc"></div><div id="lwcSub" class="lwc-sub"></div>
+        <canvas id="priceCanvas"></canvas>
+        <canvas id="rsiCanvas" class="rsi"></canvas>
+        <div id="tvChart" class="tv-chart" hidden></div>
+      </div>
+      <aside class="chart-side">
+        <h4>💧 جریان نقدینگی</h4>
+        <div class="liq compact" id="liqChart"></div>
+        <h4 class="mt">خلاصه تکنیکال</h4>
+        <div class="kv" id="techSummary"></div>
+      </aside>
+    </div>
+  </div>
+</section>
+
+<!-- ============ ADVISOR ============ -->
+<section id="sec-advisor" class="sec">
+  <div class="card chat-card">
+    <div class="card-h"><h3>🤖 مشاور هوش مصنوعی فارسی</h3><small id="aiMode">حالت: تحلیل‌گر داخلی (بدون نیاز به کلید)</small></div>
+    <div class="chat" id="chatLog"></div>
+    <div class="chips" id="chatChips">
+      <button>تحلیل بیت‌کوین</button><button>با ۱۰۰۰ دلار چطور سرمایه‌گذاری کنم؟</button><button>پیش‌بینی اتریوم تا ۲۰۳۰</button>
+      <button>بازار گاوی است یا خرسی؟</button><button>سیگنال‌های امروز</button><button>با ۵۰ میلیون تومان سبد بچین</button>
+    </div>
+    <form class="chat-form" id="chatForm"><input class="input" id="chatInput" placeholder="سؤال خود را بنویسید… مثلاً «سولانا را تحلیل کن»" autocomplete="off"><button class="btn">ارسال</button></form>
+  </div>
+</section>
+
+<!-- ============ CALCULATOR ============ -->
+<section id="sec-calc" class="sec">
+  <div class="card">
+    <div class="card-h wrap"><h3>🧮 ماشین‌حساب سود و ضرر</h3><div class="seg" id="calcModeSeg"><button data-m="simple" class="active">ساده</button><button data-m="adv">پیشرفته (مدیریت ریسک)</button></div></div>
+    <div id="calcSimple">
+      <div class="form-grid">
+        <label>ارز<select class="input" id="qCoin"></select></label>
+        <label>نوع معامله<select class="input" id="qType"><option value="spot">خرید اسپات (بدون اهرم)</option><option value="long">فیوچرز لانگ (افزایش قیمت)</option><option value="short">فیوچرز شورت (کاهش قیمت)</option></select></label>
+        <label>مبلغ سرمایه<span class="row"><input class="input" id="qAmt" type="text" inputmode="decimal" value="100"><select class="input sm" id="qAmtCur"><option value="usd">دلار</option><option value="irt">تومان</option></select></span></label>
+        <label id="qLevWrap" hidden>اهرم (x)<input class="input" id="qLev" type="text" inputmode="decimal" value="5"></label>
+        <label>قیمت ورود (دلار)<input class="input" id="qEntry" type="text" inputmode="decimal" placeholder="قیمت لحظه‌ای"></label>
+        <label>قیمت خروج (دلار)<input class="input" id="qExit" type="text" inputmode="decimal" placeholder="هدف فروش"></label>
+      </div>
+      <div class="row gap wrap mt" id="qPct"><small class="muted">خروج سریع:</small><button class="btn sm ghost" data-p="-10">−۱۰٪</button><button class="btn sm ghost" data-p="-5">−۵٪</button><button class="btn sm ghost" data-p="5">+۵٪</button><button class="btn sm ghost" data-p="10">+۱۰٪</button><button class="btn sm ghost" data-p="20">+۲۰٪</button><button class="btn sm ghost" data-p="50">+۵۰٪</button><button class="btn sm ghost" data-p="100">+۱۰۰٪</button></div>
+      <div class="result mt" id="qResult"></div>
+      <p class="hint">کارمزد ۰٫۱٪ برای هر طرف معامله لحاظ می‌شود. برای استاپ‌لاس، ریسک ۱–۲٪ و حجم خودکار به حالت «پیشرفته» بروید.</p>
+    </div>
+  </div>
+  <div class="grid two" id="calcAdv" hidden>
+    <div class="card">
+      <div class="card-h"><h3>🧮 ماشین‌حساب حرفه‌ای</h3><button class="btn sm" id="calcAuto">⚡ دریافت اطلاعات ترید خودکار</button></div>
+      <div class="form-grid">
+        <label>ارز<select class="input" id="cCoin"></select></label>
+        <label>نوع معامله<select class="input" id="cMode"><option value="spot">لانگ اسپات</option><option value="long">لانگ فیوچرز</option><option value="short">شورت فیوچرز</option></select></label>
+        <label>سرمایه کل (دلار)<input class="input" id="cCapital" type="text" inputmode="decimal" value="1000" min="0" step="any"></label>
+        <label>ریسک هر معامله (٪)<input class="input" id="cRisk" type="text" inputmode="decimal" value="1" min="0.1" max="10" step="0.1"></label>
+        <label>قیمت ورود<input class="input" id="cEntry" type="text" inputmode="decimal" step="any"></label>
+        <label>استاپ‌لاس<input class="input" id="cStop" type="text" inputmode="decimal" step="any"></label>
+        <label>قیمت خروج / تارگت<input class="input" id="cExit" type="text" inputmode="decimal" step="any"></label>
+        <label>اهرم<input class="input" id="cLev" type="text" inputmode="decimal" value="1" min="1" max="125" step="1"></label>
+        <label>کارمزد هر طرف (٪)<input class="input" id="cFee" type="text" inputmode="decimal" value="0.1" min="0" step="0.01"></label>
+        <label>مقدار (اختیاری – خالی = خودکار)<input class="input" id="cQty" type="text" inputmode="decimal" step="any" placeholder="محاسبه خودکار"></label>
+      </div>
+      <p class="hint">قانون مدیریت سرمایه: در هر پوزیشن فقط ۱ تا ۲٪ کل سرمایه ریسک شود و حداکثر ۱۰ تا ۱۵٪ سرمایه وارد یک ترید شود. مقدار خودکار با همین قانون محاسبه می‌شود.</p>
+    </div>
+    <div class="card">
+      <div class="card-h"><h3>نتیجه</h3><div class="seg sm" id="calcCurSeg"><button data-cur="usd" class="active">دلار</button><button data-cur="irt">تومان</button></div></div>
+      <div class="result" id="calcResult"></div>
+      <div class="row gap mt"><button class="btn" id="calcToJournal">📒 ثبت مستقیم در ژورنال</button><button class="btn ghost" id="calcToPaper">🔌 اجرا در ترید آزمایشی</button></div>
+      <details class="mt"><summary>فرمول‌ها</summary>
+        <p class="hint">لانگ اسپات: سود = (خروج − ورود) × مقدار − کارمزد<br>شورت فیوچرز: سود = (ورود − خروج) × مقدار × اهرم − کارمزد<br>لانگ فیوچرز: سود = (خروج − ورود) × مقدار × اهرم − کارمزد<br>لیکوییدیشن تقریبی لانگ: ورود × (۱ − ۱/اهرم + ۰٫۵٪) — شورت: ورود × (۱ + ۱/اهرم − ۰٫۵٪)</p>
+      </details>
+    </div>
+  </div>
+</section>
+
+<!-- ============ FORECAST ============ -->
+<section id="sec-forecast" class="sec">
+  <div class="grid two">
+    <div class="card">
+      <div class="card-h"><h3>🧭 گیج رژیم بازار</h3><small>گاوی / خرسی</small></div>
+      <div class="gauge-wrap"><canvas id="gaugeCanvas" width="320" height="190"></canvas></div>
+      <div class="kv" id="regimeFactors"></div>
+    </div>
+    <div class="card">
+      <div class="card-h"><h3>🎯 ۵ پیشنهاد امروز</h3><button class="btn sm ghost" id="refreshSignals">به‌روزرسانی</button></div>
+      <p class="hint" id="signalsInfo">بر اساس قیمت واقعی همین لحظه، روند EMA، RSI، ATR و حجم کندل‌های ۴ ساعته.</p>
+      <div class="table-wrap"><table class="tbl" id="signalsTable"><thead><tr><th>اولویت</th><th>نماد</th><th>جهت</th><th>محدوده ورود</th><th>استاپ‌لاس</th><th>تارگت ۱ / ۲ / ۳</th><th>تایم‌فریم ورود</th><th></th></tr></thead><tbody><tr><td colspan="8" class="muted">در حال محاسبه…</td></tr></tbody></table></div>
+      <p class="hint">مدیریت سرمایه: ریسک هر پوزیشن ۱ تا ۲٪ کل سرمایه و حداکثر ۱۰ تا ۱۵٪ سرمایه در یک ترید.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-h wrap"><h3>🧺 سبد سه‌سطحی پیشنهادی</h3>
+      <div class="seg" id="horizonSeg"><button data-h="short" class="active">کوتاه‌مدت (تا ۳ ماه)</button><button data-h="mid">میان‌مدت (۶ تا ۹ ماه)</button><button data-h="long">بلندمدت (۱۲ ماه به بالا)</button></div>
+    </div>
+    <p class="hint">انتخاب بر اساس کف نسبی فعلی (فاصله از سقف تاریخی و موقعیت در دامنه ۳۰ روزه) و چشم‌انداز اکوسیستم. وزن پیشنهادی: Blue-chip ۵۰٪، Mid-cap ۳۰٪، High-potential ۲۰٪.</p>
+    <div id="portfolioTiers"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-h"><h3>📅 جدول هولد: اگر امروز بخری و نگه داری</h3><div class="seg sm" id="scenarioSeg"><button data-s="bear">بدبینانه</button><button data-s="base" class="active">پایه</button><button data-s="bull">خوش‌بینانه</button></div></div>
+    <p class="hint">مدل سناریو بر اساس رشد مرکب سالانه هر سطح، فاصله از سقف تاریخی و چرخه هاوینگ. این عددها پیش‌بینی قطعی نیستند.</p>
+    <div class="table-wrap"><table class="tbl" id="holdTable"><thead></thead><tbody></tbody></table></div>
+  </div>
+</section>
+
+<!-- ============ TRADE ============ -->
+<section id="sec-trade" class="sec">
+  <div class="grid two">
+    <div class="card">
+      <div class="card-h"><h3>🔌 اتصال به صرافی با API Key</h3><span class="badge" id="exBadge">حالت آزمایشی</span></div>
+      <div class="form-grid">
+        <label>صرافی<select class="input" id="exName"><option>Binance</option><option>OKX</option><option>KuCoin</option><option>Bybit</option><option>Nobitex</option><option>MEXC</option></select></label>
+        <label>حالت<select class="input" id="exMode"><option value="paper">آزمایشی (Paper Trading)</option><option value="live">واقعی (نیازمند سرور واسط)</option></select></label>
+        <label class="full">API Key<input class="input" id="exKey" type="password" autocomplete="off"></label>
+        <label class="full">API Secret<input class="input" id="exSecret" type="password" autocomplete="off"></label>
+      </div>
+      <div class="row gap mt"><button class="btn" id="exSave">ذخیره امن روی همین مرورگر</button><button class="btn ghost" id="exForget">حذف کلیدها</button></div>
+      <p class="hint" id="exHint">کلیدها فقط در حافظه همین مرورگر می‌مانند و به هیچ جا ارسال نمی‌شوند. برای سفارش واقعی، مرورگر به‌دلیل محدودیت CORS و امنیت کلید Secret نمی‌تواند مستقیم به صرافی وصل شود؛ یک سرور واسط کوچک لازم است. تا آن زمان همه سفارش‌ها در حالت آزمایشی با قیمت لحظه‌ای واقعی اجرا می‌شوند.</p>
+    </div>
+    <div class="card">
+      <div class="card-h"><h3>🧾 سفارش (مثل پنل TradingView)</h3><span class="muted" id="paperBal"></span></div>
+      <div class="form-grid">
+        <label>نماد<select class="input" id="pSym"></select></label>
+        <label>اهرم<input class="input" id="pLev" type="text" inputmode="decimal" value="1" min="1" max="50"></label>
+        <label>مبلغ (دلار)<input class="input" id="pAmt" type="text" inputmode="decimal" value="100" min="1"></label>
+        <label>قیمت لحظه‌ای<input class="input" id="pPrice" readonly></label>
+        <label>استاپ‌لاس (اختیاری)<input class="input" id="pSL" type="text" inputmode="decimal" step="any"></label>
+        <label>تیک‌پرافیت (اختیاری)<input class="input" id="pTP" type="text" inputmode="decimal" step="any"></label>
+      </div>
+      <div class="row gap mt"><button class="btn buy" id="pBuy">خرید / لانگ</button><button class="btn sell" id="pSell">فروش / شورت</button><button class="btn ghost" id="pReset">ریست حساب</button></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-h"><h3>پوزیشن‌های باز</h3><span id="paperEquity" class="muted"></span></div>
+    <div class="table-wrap"><table class="tbl" id="posTable"><thead><tr><th>نماد</th><th>جهت</th><th>ورود</th><th>فعلی</th><th>مقدار</th><th>اهرم</th><th>SL / TP</th><th>سود/زیان</th><th></th></tr></thead><tbody></tbody></table></div>
+    <h4 class="mt">تاریخچه سفارش‌ها</h4>
+    <div class="table-wrap"><table class="tbl" id="histTable"><thead><tr><th>زمان</th><th>نماد</th><th>جهت</th><th>ورود</th><th>خروج</th><th>سود/زیان</th><th>منبع</th></tr></thead><tbody></tbody></table></div>
+  </div>
+  <div class="grid two">
+    <div class="card">
+      <div class="card-h"><h3>🔗 وب‌هوک TradingView</h3></div>
+      <p class="hint">این متن را در بخش Message آلارم TradingView بگذارید. دریافت خودکار وب‌هوک نیاز به آدرس عمومی (سرور) دارد؛ تا آن زمان می‌توانید پیام آلارم را این‌جا بچسبانید تا در حالت آزمایشی اجرا شود.</p>
+      <pre class="code" id="webhookTpl"></pre>
+      <textarea class="input" id="webhookIn" rows="4" placeholder='{"symbol":"BTCUSDT","side":"buy","amount":100,"leverage":2,"sl":0,"tp":0}'></textarea>
+      <div class="row gap mt"><button class="btn" id="webhookRun">اجرای پیام وب‌هوک</button><button class="btn ghost" id="webhookCopy">کپی قالب</button></div>
+    </div>
+    <div class="card">
+      <div class="card-h"><h3>🟦 اتصال MetaTrader 4 / 5</h3></div>
+      <p class="hint">اکسپرت آماده برای فارکس و طلا: حجم را بر اساس درصد ریسک حساب می‌کند و سفارش را با استاپ و تارگت باز می‌کند. فایل را در پوشه MQL5/Experts (یا MQL4/Experts) کپی و در MetaEditor کامپایل کنید.</p>
+      <div class="form-grid">
+        <label>نماد<input class="input" id="mtSym" value="XAUUSD"></label>
+        <label>جهت<select class="input" id="mtSide"><option value="buy">خرید</option><option value="sell">فروش</option></select></label>
+        <label>ریسک (٪)<input class="input" id="mtRisk" type="text" inputmode="decimal" value="1" step="0.1"></label>
+        <label>استاپ (پیپ/پوینت)<input class="input" id="mtSL" type="text" inputmode="decimal" value="300"></label>
+        <label>تارگت (پیپ/پوینت)<input class="input" id="mtTP" type="text" inputmode="decimal" value="600"></label>
+      </div>
+      <div class="row gap mt"><button class="btn" id="mt5Dl">دانلود اکسپرت MT5 (.mq5)</button><button class="btn ghost" id="mt4Dl">دانلود اکسپرت MT4 (.mq4)</button></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ ALERTS ============ -->
+<section id="sec-alerts" class="sec">
+  <div class="grid two">
+    <div class="card">
+      <div class="card-h"><h3>🔔 هشدار شرطی قیمت</h3><button class="btn sm ghost" id="notifPerm">فعال‌سازی نوتیف مرورگر</button></div>
+      <form class="form-grid" id="alertForm">
+        <label>نماد<select class="input" id="aSym"></select></label>
+        <label>شرط<select class="input" id="aCond"><option value="above">بالاتر از</option><option value="below">پایین‌تر از</option></select></label>
+        <label>قیمت (دلار)<input class="input" id="aPrice" type="text" inputmode="decimal" step="any" required></label>
+        <label>یادداشت<input class="input" id="aNote" placeholder="اختیاری"></label>
+        <button class="btn full">افزودن هشدار</button>
+      </form>
+      <ul class="list" id="alertList"></ul>
+    </div>
+    <div class="card">
+      <div class="card-h"><h3>✈️ ربات تلگرام</h3><span class="badge" id="tgBadge">غیرفعال</span></div>
+      <div class="form-grid">
+        <label class="full">توکن ربات (از BotFather)<input class="input" id="tgToken" type="password" autocomplete="off" placeholder="123456:ABC…"></label>
+        <label class="full">Chat ID شخصی<input class="input" id="tgChat" placeholder="مثلاً 123456789"></label>
+      </div>
+      <div class="toggles">
+        <label class="switch"><input type="checkbox" id="tgOn"><span></span> ارسال به تلگرام</label>
+        <label class="switch"><input type="checkbox" data-tg="whale" checked><span></span> هشدار نهنگ</label>
+        <label class="switch"><input type="checkbox" data-tg="volume" checked><span></span> هشدار حجم</label>
+        <label class="switch"><input type="checkbox" data-tg="news" checked><span></span> هشدار خبری</label>
+        <label class="switch"><input type="checkbox" data-tg="price" checked><span></span> هشدار قیمت</label>
+        <label class="switch"><input type="checkbox" data-tg="signal"><span></span> ۵ سیگنال روزانه</label>
+      </div>
+      <div class="row gap mt"><button class="btn" id="tgSave">ذخیره</button><button class="btn ghost" id="tgTest">ارسال پیام آزمایشی</button></div>
+      <p class="hint">برای گرفتن Chat ID به ربات خود یک پیام بدهید و سپس دکمه «یافتن Chat ID» را بزنید. <button class="link" id="tgFind">یافتن Chat ID</button></p>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-h"><h3>⚙️ قوانین لایه هشدار</h3></div>
+    <div class="form-grid four">
+      <label>ضریب رشد حجم (× میانگین ۲۰ کندل)<input class="input" id="rVol" type="text" inputmode="decimal" value="2" step="0.1"></label>
+      <label>حداقل تراکنش نهنگ (دلار)<input class="input" id="rWhale" type="text" inputmode="decimal" value="5000000" step="100000"></label>
+      <label>کلمات کلیدی خبر<input class="input" id="rWords" value="ETF, SEC, Rate, Hack, Fed, CPI"></label>
+      <label>تایم‌فریم پایش حجم<select class="input" id="rTf"><option value="5m">۵ دقیقه</option><option value="15m" selected>۱۵ دقیقه</option><option value="1h">۱ ساعت</option></select></label>
+    </div>
+    <div class="toggles mt">
+      <label class="switch"><input type="checkbox" id="rSound" checked><span></span> هشدار صوتی</label>
+      <label class="switch"><input type="checkbox" id="rNotif" checked><span></span> نوتیف مرورگر</label>
+    </div>
+    <div class="row gap mt"><button class="btn" id="rulesSave">ذخیره قوانین</button></div>
+  </div>
+</section>
+
+<!-- ============ JOURNAL ============ -->
+<section id="sec-journal" class="sec">
+  <div class="card no-print">
+    <div class="card-h"><h3>📒 ثبت ترید (ژورنال تصویری)</h3></div>
+    <form class="form-grid four" id="jForm">
+      <label>تاریخ<input class="input" id="jDate" type="datetime-local" required></label>
+      <label>نماد<input class="input" id="jSym" required placeholder="BTC"></label>
+      <label>جهت<select class="input" id="jSide"><option value="long">لانگ</option><option value="short">شورت</option></select></label>
+      <label>اهرم<input class="input" id="jLev" type="text" inputmode="decimal" value="1" min="1"></label>
+      <label>ورود<input class="input" id="jEntry" type="text" inputmode="decimal" step="any" required></label>
+      <label>خروج<input class="input" id="jExit" type="text" inputmode="decimal" step="any"></label>
+      <label>مقدار<input class="input" id="jQty" type="text" inputmode="decimal" step="any" required></label>
+      <label>کارمزد (دلار)<input class="input" id="jFee" type="text" inputmode="decimal" step="any" value="0"></label>
+      <label>استاپ‌لاس<input class="input" id="jSL" type="text" inputmode="decimal" step="any"></label>
+      <label>تارگت<input class="input" id="jTP" type="text" inputmode="decimal" step="any"></label>
+      <label>احساس هنگام ورود<select class="input" id="jEmotion"><option>آرام و منطقی</option><option>مطمئن</option><option>ترس از جا ماندن (FOMO)</option><option>طمع</option><option>ترس</option><option>انتقام از ضرر</option><option>خسته / بی‌حوصله</option></select></label>
+      <label>امتیاز به ترید<select class="input" id="jRate"><option value="5">★★★★★</option><option value="4">★★★★</option><option value="3" selected>★★★</option><option value="2">★★</option><option value="1">★</option></select></label>
+      <label class="full">دلیل ورود<textarea class="input" id="jReason" rows="2" placeholder="ستاپ، شکست مقاومت، واگرایی RSI…"></textarea></label>
+      <label class="full">درس این ترید<textarea class="input" id="jLesson" rows="2"></textarea></label>
+      <label>عکس چارت قبل از ترید<input class="input" id="jImgBefore" type="file" accept="image/*"></label>
+      <label>عکس چارت بعد از ترید<input class="input" id="jImgAfter" type="file" accept="image/*"></label>
+      <button class="btn full">ثبت در ژورنال</button>
+    </form>
+  </div>
+  <div class="card">
+    <div class="card-h"><h3>کارنامه ژورنال</h3><div class="row gap no-print"><button class="btn sm ghost" id="jCsv">خروجی CSV</button><button class="btn sm ghost" id="jPrint">چاپ تمیز</button></div></div>
+    <div class="stats" id="jStats"></div>
+    <div class="table-wrap"><table class="tbl" id="jTable"><thead><tr><th>تاریخ</th><th>نماد</th><th>جهت</th><th>ورود</th><th>خروج</th><th>مقدار</th><th>سود/زیان</th><th>احساس</th><th>امتیاز</th><th>دلیل</th><th>تصاویر</th><th class="no-print"></th></tr></thead><tbody></tbody></table></div>
+  </div>
+</section>
+
+<!-- ============ BACKTEST ============ -->
+<section id="sec-backtest" class="sec">
+  <div class="card">
+    <div class="card-h"><h3>🧪 بک‌تست استراتژی روی داده گذشته</h3></div>
+    <div class="form-grid four">
+      <label>نماد<select class="input" id="btSym"></select></label>
+      <label>تایم‌فریم<select class="input" id="btTf"><option value="1h">۱ ساعت</option><option value="4h" selected>۴ ساعت</option><option value="1d">روزانه</option></select></label>
+      <label>استراتژی<select class="input" id="btStrat"><option value="ma">تقاطع MA20 / MA50</option><option value="rsi">برگشت RSI (۳۰ / ۷۰)</option><option value="bb">بازگشت به میانگین بولینگر</option><option value="breakout">شکست کانال ۲۰ کندل</option></select></label>
+      <label>سرمایه اولیه (دلار)<input class="input" id="btCap" type="text" inputmode="decimal" value="1000"></label>
+      <label>ریسک هر ترید (٪)<input class="input" id="btRisk" type="text" inputmode="decimal" value="2" step="0.5"></label>
+      <label>استاپ (× ATR)<input class="input" id="btSL" type="text" inputmode="decimal" value="1.5" step="0.1"></label>
+      <label>تارگت (× ATR)<input class="input" id="btTP" type="text" inputmode="decimal" value="3" step="0.1"></label>
+      <label>کارمزد هر طرف (٪)<input class="input" id="btFee" type="text" inputmode="decimal" value="0.1" step="0.01"></label>
+    </div>
+    <div class="row gap mt"><button class="btn" id="btRun">اجرای بک‌تست (۱۰۰۰ کندل)</button><span class="muted" id="btInfo"></span></div>
+  </div>
+  <div class="card">
+    <div class="card-h"><h3>کارنامه</h3></div>
+    <div class="stats" id="btStats"><p class="muted">بک‌تست را اجرا کنید.</p></div>
+    <canvas id="equityCanvas" class="equity"></canvas>
+    <details class="mt"><summary>لیست معاملات</summary><div class="table-wrap"><table class="tbl" id="btTrades"><thead><tr><th>#</th><th>جهت</th><th>ورود</th><th>خروج</th><th>سود ٪</th><th>موجودی</th></tr></thead><tbody></tbody></table></div></details>
+  </div>
+</section>
+
+<!-- ============ ONCHAIN ============ -->
+<section id="sec-onchain" class="sec">
+  <div class="grid two">
+    <div class="card">
+      <div class="card-h"><h3>⛓️ تحلیل آن‌چین بیت‌کوین</h3><small>Coin Metrics، Blockchain.com</small></div>
+      <div class="kv" id="onchainBox"><p class="muted">در حال دریافت…</p></div>
+      <canvas id="mvrvCanvas" class="mini-chart"></canvas>
+      <p class="hint">SOPR و موجودی کیف‌پول‌های قدیمی فقط در منابع پولی (Glassnode / CryptoQuant) در دسترس است؛ در تنظیمات می‌توانید کلید آن‌ها را برای نسخه سروری نگه دارید.</p>
+    </div>
+    <div class="card">
+      <div class="card-h"><h3>🐋 رفتار نهنگ‌ها</h3><small>تراکنش‌های بزرگ شبکه بیت‌کوین (mempool.space)</small></div>
+      <ul class="feed" id="whaleList"><li class="muted">در حال پایش…</li></ul>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-h"><h3>🧠 تحلیل سنتیمنت خودکار</h3><small>امتیازدهی خودکار به تیتر اخبار برای هر ارز</small></div>
+    <div class="grid sent" id="sentGrid"></div>
+    <p class="hint">برای پست‌های X (توییتر) کلید API پولی لازم است؛ امتیاز فعلی از تیتر اخبار و شاخص ترس و طمع ساخته می‌شود.</p>
+  </div>
+</section>
+
+<!-- ============ REPORT ============ -->
+<section id="sec-report" class="sec">
+  <div class="card no-print">
+    <div class="card-h"><h3>📄 گزارش رسمی هفتگی</h3></div>
+    <div class="form-grid four">
+      <label>نام تحلیل‌گر<input class="input" id="rpName" placeholder="نام و نام خانوادگی"></label>
+      <label>عنوان گزارش<input class="input" id="rpTitle" value="گزارش هفتگی بازار و سبد"></label>
+      <label>لوگو (اختیاری)<input class="input" id="rpLogo" type="file" accept="image/*"></label>
+      <label>امضا<div class="row gap"><button class="btn sm ghost" type="button" id="sigClear">پاک کردن امضا</button></div></label>
+    </div>
+    <canvas id="sigPad" class="sigpad" width="500" height="140"></canvas>
+    <div class="row gap mt"><button class="btn" id="rpBuild">ساخت گزارش</button><button class="btn ghost" id="rpPrint">ذخیره PDF / چاپ</button></div>
+    <p class="hint">برای PDF در پنجره چاپ گزینه «Save as PDF» را انتخاب کنید.</p>
+  </div>
+  <div class="report" id="reportDoc"></div>
+</section>
+
+<!-- ============ SETTINGS ============ -->
+<section id="sec-settings" class="sec">
+  <div class="grid two">
+    <div class="card">
+      <div class="card-h"><h3>💵 نرخ دلار به تومان</h3></div>
+      <div class="form-grid">
+        <label>منبع<select class="input" id="sRateSrc"><option value="nobitex">نوبیتکس (تتر – خودکار)</option><option value="manual">دستی (دلار آزاد)</option></select></label>
+        <label>نرخ دستی (تومان)<input class="input" id="sRate" type="text" inputmode="decimal" value="110000"></label>
+      </div>
+      <p class="hint" id="rateInfo"></p>
+      <button class="btn mt" id="sRateSave">ذخیره</button>
+    </div>
+    <div class="card">
+      <div class="card-h"><h3>🔑 کلیدهای اختیاری</h3></div>
+      <div class="form-grid">
+        <label class="full">کلید OpenAI (برای پاسخ‌های پیشرفته مشاور)<input class="input" id="sOpenAI" type="password" autocomplete="off" placeholder="sk-…"></label>
+        <label class="full">مدل<input class="input" id="sModel" value="gpt-4o-mini"></label>
+        <label class="full">کلید Whale Alert (اختیاری)<input class="input" id="sWhale" type="password" autocomplete="off"></label>
+      </div>
+      <button class="btn mt" id="sKeysSave">ذخیره</button>
+      <p class="hint">همه کلیدها فقط در localStorage همین مرورگر ذخیره می‌شوند.</p>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-h"><h3>💾 پشتیبان‌گیری</h3></div>
+    <div class="row gap"><button class="btn ghost" id="backupDl">دانلود پشتیبان کامل (JSON)</button><label class="btn ghost">بازیابی از فایل<input type="file" id="backupUp" accept="application/json" hidden></label><button class="btn sell" id="wipeAll">پاک کردن همه داده‌ها</button></div>
+  </div>
+</section>
+
+</main>
+</div>
+
+<div class="toast-box" id="toastBox"></div>
+<div class="modal" id="imgModal" hidden><img alt=""></div>
+<script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+<script src="script.js"></script>
+</body>
+</html>
