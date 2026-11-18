@@ -1687,7 +1687,7 @@ function bindQuickCalc() {
   const q = $('#cQty'); if (q) q.placeholder = 'خالی = خودکار بر اساس ریسک٪';
   qcFillPrice();
 }
-document.addEventListener('input', e => { const t = e.target; if (t && t.inputMode === 'decimal') { const v = toEn(t.value).replace(/[٫,]/g, '.'); if (v !== t.value) t.value = v; } }, true);
+document.addEventListener('input', e => { const t = e.target; if (t && t.inputMode === 'decimal') { const v = toEn(t.value).replace(/٫/g, '.').replace(/[,،]/g, ''); if (v !== t.value) t.value = v; } }, true);
 
 /* ---- مشاور: پاسخ همیشگی و هوشمندتر ---- */
 function marketBrief() {
