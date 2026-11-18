@@ -662,10 +662,10 @@ function renderSentiment() {
 
 /* هشدار شرطی قیمت */
 function checkPriceAlerts(sym) {
-  const l = state.live[sym]; if (!l) return;
   let changed = false;
   state.alerts.forEach(a => {
-    if (a.done || a.sym + 'USDT' !== sym) return;
+    if (a.done || (sym && a.sym + 'USDT' !== sym)) return;
+    const c = priceOf(a.sym); if (!c) return; const l = { c };
     if ((a.cond === 'above' && l.c >= a.price) || (a.cond === 'below' && l.c <= a.price)) {
       a.done = true; a.hitAt = Date.now(); changed = true;
       pushAlert('price', `${a.sym} ${a.cond === 'above' ? 'بالاتر از' : 'پایین‌تر از'} ${fmtUsd(a.price)}`, `قیمت فعلی ${fmtUsd(l.c)}${a.note ? ' — ' + a.note : ''}`);
@@ -1421,7 +1421,7 @@ async function init() {
   safe(computeSignals).then(() => { if (!$('#cEntry').value && state.signals[0]) { $('#cCoin').value = state.signals[0].sym; } });
   setTimeout(() => safe(monitorVolume), 8000);
   // زمان‌بندی‌ها
-  setInterval(async () => { try { await loadMarkets(); store.set('marketsCache', state.allMarkets); renderTable(); renderTicker(); startStream(); } catch { } }, 90e3);
+  setInterval(async () => { try { await loadMarkets(); store.set('marketsCache', state.allMarkets); renderTable(); renderTicker(); startStream(); checkPriceAlerts(); } catch { } }, 90e3);
   setInterval(async () => { await Promise.all([safe(loadGlobal), safe(loadGold), safe(loadFutures), safe(loadFNG)]); renderLiquidity(); renderFutures(); }, 120e3);
   setInterval(() => safe(loadNews), 75e3);
   setInterval(() => safe(monitorWhales), 60e3);
