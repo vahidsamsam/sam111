@@ -870,6 +870,7 @@ function renderCalc() {
     ${r.warns.map(w => `<div class="warn">${w}</div>`).join('')}`;
 }
 function fillCalcFromSignal(s) {
+  const adv = $('#calcModeSeg [data-m="adv"]'); if (adv && $('#calcAdv').hidden) adv.click();
   $('#cCoin').value = s.sym; if ($('#cCoin').value !== s.sym) { const o = new Option(s.sym, s.sym); $('#cCoin').add(o); $('#cCoin').value = s.sym; }
   $('#cMode').value = s.side === 'long' ? ($('#cMode').value === 'long' ? 'long' : 'spot') : 'short';
   if (s.side === 'short' && +$('#cLev').value < 2) $('#cLev').value = 3;
