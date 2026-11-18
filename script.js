@@ -1643,9 +1643,10 @@ function renderIndBar() {
   $$('#indBar [data-rm]').forEach(b => b.onclick = () => { state.ind.splice(+b.dataset.rm, 1); indChanged(); });
   $('#indAdd').onchange = e => { const t = e.target.value; if (!t) return; state.ind.push({ t, p: [...IND_DEF[t][1]] }); indChanged(); };
 }
-function indChanged() { store.set('ind', state.ind); renderIndBar(); if (!$('#tvChart').hidden) loadChart(); else lwcRender(); }
+function syncLegacyInd() { [['indMA', 'MA'], ['indBB', 'BB'], ['indRSI', 'RSI']].forEach(([id, t]) => { const el = $('#' + id); if (el) el.checked = state.ind.some(i => i.t === t || (t === 'MA' && i.t === 'EMA')); }); }
+function indChanged() { syncLegacyInd(); store.set('ind', state.ind); renderIndBar(); if (!$('#tvChart').hidden) loadChart(); else lwcRender(); }
 function bindChart() {
-  fillChartSymbols(); renderIndBar();
+  fillChartSymbols(); renderIndBar(); syncLegacyInd();
   $('#chartSymbol').onchange = loadChart;
   $$('#tfSeg button').forEach(b => b.onclick = () => { $$('#tfSeg button').forEach(x => x.classList.remove('active')); b.classList.add('active'); chartState.tf = b.dataset.tf; loadChart(); });
   $('#tvToggle').onclick = () => { chartState.tv = !chartState.tv; loadChart(); };
