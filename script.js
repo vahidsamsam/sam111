@@ -460,7 +460,9 @@ function renderTechSummary(t) {
 }
 function liveCandle(sym) {
   const l = state.live[sym], d = chartState.data, last = d[d.length - 1]; if (!l || !last) return;
-  last.c = l.c; last.h = Math.max(last.h, l.c); last.l = Math.min(last.l, l.c);
+  const step = d.length > 1 ? last.t - d[d.length - 2].t : 0;
+  if (step > 0 && Date.now() >= last.t + step) { d.push({ t: last.t + Math.floor((Date.now() - last.t) / step) * step, o: last.c, h: l.c, l: l.c, c: l.c, v: 0 }); if (d.length > 1000) d.shift(); }
+  else { last.c = l.c; last.h = Math.max(last.h, l.c); last.l = Math.min(last.l, l.c); }
   if (!liveCandle.t || Date.now() - liveCandle.t > 1000) { liveCandle.t = Date.now(); drawChart(); }
 }
 function setupCanvas(cv) {
