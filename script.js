@@ -1872,7 +1872,7 @@ async function init2() {
   renderRate(); renderWatch(); fillWlAdd();
   setTimeout(async () => { await safe(loadWide); renderMovers(); fillWlAdd(); }, 8000);
   setInterval(async () => { await safe(loadRate); renderRate(); }, 60e3);
-  setInterval(async () => { await Promise.all([safe(loadWide), safe(loadMetals)]); renderMovers(); fillWlAdd(); }, 300e3);
+  setInterval(async () => { await Promise.all([safe(loadWide), safe(loadMetals), safe(loadFxAll)]); renderMovers(); fillWlAdd(); }, 300e3);
   setInterval(renderWatch, 3000);
 }
 document.addEventListener('DOMContentLoaded', init2);
