@@ -1565,6 +1565,8 @@ function lwcRender(fit) {
   if (!lwcInit()) return drawChartCanvas();
   const d = chartState.data; if (!d.length) return;
   const L = lwc, c = d.map(x => x.c), time = d.map(tt);
+  const lp = c[c.length - 1], prec = lp < 0.0001 ? 10 : lp < 0.01 ? 8 : lp < 1 ? 6 : lp < 100 ? 4 : 2;
+  L.candle.applyOptions({ priceFormat: { type: 'price', precision: prec, minMove: Math.pow(10, -prec) } });
   L.candle.setData(d.map((x, i) => ({ time: time[i], open: x.o, high: x.h, low: x.l, close: x.c })));
   L.over.forEach(s => L.main.removeSeries(s)); L.subS.forEach(s => L.sub.removeSeries(s)); L.over = []; L.subS = [];
   const line = (chart, arr, color, w, bag) => { const s = chart.addLineSeries({ color, lineWidth: w, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false }); s.setData(arr.map((v, i) => v == null || !isFinite(v) ? { time: time[i] } : { time: time[i], value: v })); bag.push(s); return s; };
