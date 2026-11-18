@@ -137,7 +137,7 @@ const CG = 'https://api.coingecko.com/api/v3';
 const BN = 'https://data-api.binance.vision/api/v3';
 async function loadMarkets() {
   const d = await getJSON(`${CG}/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=60&page=1&sparkline=true&price_change_percentage=1h,24h,7d,30d`);
-  state.markets = d.filter(c => !STABLES.has(c.symbol)).slice(0, 50);
+  state.markets = ((state.tableSize || 50) > 50 && state.wide ? state.wide : d.filter(c => !STABLES.has(c.symbol))).slice(0, state.tableSize || 50);
   state.allMarkets = d;
   indexMarkets(d);
   setStatus(true);
@@ -471,7 +471,7 @@ function setupCanvas(cv) {
   const g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, h); g.direction = 'ltr'; g.textAlign = 'left';
   return { g, w, h };
 }
-function drawChart() {
+function drawChartCanvas() {
   const cv = $('#priceCanvas'); if (cv.hidden || !cv.clientWidth) return;
   const all = chartState.data; if (!all.length) return;
   const { g, w, h } = setupCanvas(cv);
@@ -629,7 +629,7 @@ async function loadNews(first) {
   await Promise.all(FEEDS.map(async ([src, url]) => {
     try {
       const d = await getJSON('https://api.rss2json.com/v1/api.json?rss_url=' + encodeURIComponent(url));
-      (d.items || []).forEach(i => out.push({ title: i.title, link: i.link, src, t: new Date((i.pubDate || '').replace(' ', 'T') + 'Z').getTime() || Date.now() }));
+      (d.items || []).forEach(i => out.push({ title: i.title, link: i.link, desc: (i.description || '').replace(/<[^>]+>/g, ' ').replace(/&[a-z#0-9]+;/gi, ' ').replace(/\s+/g, ' ').trim().slice(0, 500), src, t: new Date((i.pubDate || '').replace(' ', 'T') + 'Z').getTime() || Date.now() }));
     } catch { }
   }));
   if (!out.length) return;
@@ -956,7 +956,7 @@ function signalsText() {
   if (!state.signals.length) return 'سیگنال‌ها هنوز محاسبه نشده‌اند.';
   return '<b>🎯 ۵ پیشنهاد امروز</b><table><tr><th>نماد</th><th>جهت</th><th>ورود</th><th>استاپ</th><th>تارگت‌ها</th></tr>' + state.signals.map(s => `<tr><td>${s.sym}</td><td class="${s.side === 'long' ? 'up' : 'down'}">${s.side === 'long' ? 'لانگ' : 'شورت'}</td><td class="ltr">${fmtNum(s.entry[0])}–${fmtNum(s.entry[1])}</td><td class="ltr">${fmtNum(s.sl)}</td><td class="ltr">${s.tp.map(v => fmtNum(v)).join(' / ')}</td></tr>`).join('') + '</table>ریسک هر پوزیشن ۱ تا ۲٪ سرمایه.';
 }
-async function localAnswer(q) {
+async function localAnswerBase(q) {
   const t = normFa(q), coin = detectCoin(t), amt = detectAmount(t);
   if (/سیگنال|پیشنهاد امروز|ترید امروز|signal/.test(t)) return signalsText();
   if (/گاوی|خرسی|رژیم|وضعیت بازار|bull|bear|روند کلی/.test(t)) return regimeText();
@@ -1431,3 +1431,442 @@ async function init() {
   setInterval(() => { renderFeed(); renderWhales(); }, 30e3);
 }
 document.addEventListener('DOMContentLoaded', init);
+
+/* ================= نسخه ۲: زبان، نرخ خودکار، چارت حرفه‌ای، واچ‌لیست، ماشین‌حساب ساده، خلاصه خبر، راهنما ================= */
+const LANG = { cur: store.get('lang', 'fa') };
+const deb = (f, ms) => { let t; return () => { clearTimeout(t); t = setTimeout(f, ms); }; };
+const trCache = store.get('tr', {});
+const saveTr = deb(() => { const k = Object.keys(trCache); if (k.length > 3000) k.slice(0, k.length - 3000).forEach(x => delete trCache[x]); store.set('tr', trCache); }, 1500);
+async function translate(text, tl = 'fa', sl = 'auto') {
+  const k = tl + ':' + text; if (trCache[k]) return trCache[k];
+  const d = await getJSON(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=${sl}&tl=${tl}&dt=t&q=` + encodeURIComponent(text), {}, 10000);
+  const out = (d[0] || []).map(s => s[0]).join(''); trCache[k] = out; saveTr(); return out;
+}
+
+/* ---- نرخ دلار خودکار از چند صرافی ---- */
+const RATE_SRCS = [
+  ['نوبیتکس', async () => { const d = await getJSON('https://api.nobitex.ir/market/stats?srcCurrency=usdt&dstCurrency=rls', {}, 8000); return Number(d.stats['usdt-rls'].latest) / 10; }],
+  ['بیت‌پین', async () => { const d = await getJSON('https://api.bitpin.org/api/v1/mkt/tickers/', {}, 8000); return Number((d.find(x => x.symbol === 'USDT_IRT') || {}).price); }]
+];
+async function loadRate() {
+  if (state.rateSrc === 'manual') { state.rate = Number(store.get('manualRate', state.rate)); state.rateLive = false; return; }
+  try {
+    const [name, v] = await Promise.any(RATE_SRCS.map(async ([n, f]) => { const v = await f(); if (!(v > 10000 && v < 1e8)) throw new Error('bad'); return [n, v]; }));
+    state.rate = Math.round(v); state.rateLive = true; state.rateName = name; state.rateT = Date.now(); store.set('rate', state.rate);
+  } catch { state.rateLive = false; state.rate = Number(store.get('rate', store.get('manualRate', state.rate))); }
+}
+function renderRate() {
+  const chip = $('#rateChip'); if (!chip) return;
+  chip.textContent = 'دلار: ' + fmtNum(state.rate, 0) + ' ت' + (state.rateLive ? ' · ' + state.rateName : ' (دستی)');
+  chip.title = state.rateLive ? `نرخ تتر در ${state.rateName} – به‌روزرسانی خودکار هر ۶۰ ثانیه (${new Date(state.rateT).toLocaleTimeString('fa-IR')})` : 'منابع آنلاین در دسترس نبود؛ آخرین نرخ ذخیره‌شده یا نرخ دستی';
+  const info = $('#rateInfo'); if (info) info.textContent = state.rateLive ? `نرخ لحظه‌ای تتر (${state.rateName}): ${fmtNum(state.rate, 0)} تومان – هر ۶۰ ثانیه از نوبیتکس/بیت‌پین خودکار به‌روز می‌شود.` : `منابع آنلاین در دسترس نبود یا حالت دستی انتخاب شده؛ نرخ فعلی ${fmtNum(state.rate, 0)} تومان.`;
+}
+
+/* ---- ارزهای بیشتر، فلزات، فارکس ---- */
+async function loadWide() {
+  const all = await getJSON(`${CG}/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=1&sparkline=true&price_change_percentage=1h,24h,7d,30d`, {}, 20000).catch(() => []);
+  if (!all.length) return;
+  state.wide = all.filter(c => !STABLES.has(c.symbol));
+  all.forEach(c => { state.byId[c.id] = state.byId[c.id] || c; if (!state.bySym[c.symbol]) state.bySym[c.symbol] = c; });
+}
+const METALS = { XAU: ['طلا (انس)', 'OANDA:XAUUSD'], XAG: ['نقره', 'OANDA:XAGUSD'], XPT: ['پلاتین', 'OANDA:XPTUSD'], XPD: ['پالادیوم', 'OANDA:XPDUSD'], HG: ['مس', 'COMEX:HG1!'] };
+const FX_PAIRS = ['EURUSD', 'GBPUSD', 'USDJPY', 'USDCHF', 'AUDUSD', 'USDCAD', 'NZDUSD', 'EURGBP', 'EURJPY', 'USDCNY', 'USDTRY'];
+state.metals = store.get('metals', {});
+async function loadMetals() {
+  const day = new Date().toISOString().slice(0, 10);
+  await Promise.all(Object.keys(METALS).map(async s => {
+    try {
+      const d = await getJSON('https://api.gold-api.com/price/' + s, {}, 10000); const p = +d.price; if (!p) return;
+      const m = state.metals[s] || {}; if (m.day !== day) { m.prev = m.p || p; m.day = day; }
+      m.p = p; m.chg = m.prev ? (p / m.prev - 1) * 100 : null; state.metals[s] = m;
+      if (s === 'XAU') state.gold = p;
+    } catch { }
+  }));
+  store.set('metals', state.metals);
+}
+async function loadFxAll() {
+  const d = await getJSON('https://api.frankfurter.dev/v1/latest?base=USD'); state.fxAll = d.rates;
+  const prev = new Date(new Date(d.date).getTime() - 864e5).toISOString().slice(0, 10);
+  const p = await getJSON(`https://api.frankfurter.dev/v1/${prev}?base=USD`).catch(() => null); state.fxPrev = p && p.rates;
+}
+const fxPair = (pair, r) => { if (!r) return null; const a = pair.slice(0, 3), b = pair.slice(3); const ra = a === 'USD' ? 1 : r[a], rb = b === 'USD' ? 1 : r[b]; return ra && rb ? rb / ra : null; };
+
+/* ---- واچ‌لیست قابل شخصی‌سازی ---- */
+const WL_DEFAULT = ['c:bitcoin', 'c:ethereum', 'c:binancecoin', 'c:solana', 'c:ripple', 'c:dogecoin', 'm:XAU', 'm:XAG', 'f:EURUSD', 'f:GBPUSD', 'f:USDJPY', 'x:DXY'];
+let wlGroup = 'all';
+const wlList = () => store.get('watch', WL_DEFAULT);
+function wlInfo(k) {
+  const t = k[0], id = k.slice(2);
+  if (t === 'c') { const c = state.byId[id]; if (!c) return null; return { g: 'crypto', name: c.symbol.toUpperCase(), sub: c.name, img: c.image, px: fmtPrice(livePriceFor(c)), chg: liveChgFor(c), chart: c.symbol.toUpperCase() + 'USDT' }; }
+  if (t === 'm') { const m = state.metals[id] || {}; const p = m.p || (id === 'XAU' ? state.gold : null); return { g: 'metal', name: id, sub: METALS[id][0], px: p ? fmtPrice(p) : '—', chg: m.chg, chart: 'TV:' + METALS[id][1] }; }
+  if (t === 'f') { const p = fxPair(id, state.fxAll), pv = fxPair(id, state.fxPrev); return { g: 'fx', name: id.slice(0, 3) + '/' + id.slice(3), sub: 'فارکس', px: p ? fmtNum(p, p > 20 ? 2 : 4) : '—', chg: p && pv ? (p / pv - 1) * 100 : null, chart: 'TV:FX:' + id }; }
+  if (t === 'x') return { g: 'fx', name: 'DXY', sub: 'شاخص دلار', px: state.dxy ? fmtNum(state.dxy, 2) : '—', chg: null, chart: 'TV:TVC:DXY' };
+  return null;
+}
+function renderWatch() {
+  const el = $('#watchlist'); if (!el) return;
+  el.innerHTML = wlList().map(k => [k, wlInfo(k)]).filter(([, i]) => i && (wlGroup === 'all' || i.g === wlGroup)).map(([k, i]) => `<div class="wl-item" data-chart="${esc(i.chart)}" title="نمایش چارت ${esc(i.name)}">
+    <button class="wl-x" data-rm="${esc(k)}" title="حذف از واچ‌لیست">✕</button>
+    <div class="wl-n">${i.img ? `<img src="${i.img}" alt="">` : `<span class="wl-ic">${i.g === 'metal' ? '🥇' : '💱'}</span>`}<b>${esc(i.name)}</b><small class="muted">${esc(i.sub)}</small></div>
+    <div class="wl-p num">${i.px}</div><div class="${i.chg == null ? 'muted' : i.chg >= 0 ? 'up' : 'down'} num">${i.chg == null ? '—' : (i.chg >= 0 ? '▲ ' : '▼ ') + fmtNum(Math.abs(i.chg), 2) + '٪'}</div></div>`).join('') || '<p class="muted">موردی در این گروه نیست؛ از «افزودن» انتخاب کنید.</p>';
+}
+function fillWlAdd() {
+  const sel = $('#wlAdd'); if (!sel) return; const have = new Set(wlList());
+  const coins = (state.wide || state.allMarkets || []).filter(c => !have.has('c:' + c.id));
+  sel.innerHTML = '<option value="">➕ افزودن…</option>' +
+    `<optgroup label="فلزات">${Object.entries(METALS).filter(([s]) => !have.has('m:' + s)).map(([s, v]) => `<option value="m:${s}">${v[0]} (${s})</option>`).join('')}</optgroup>` +
+    `<optgroup label="فارکس">${FX_PAIRS.filter(p => !have.has('f:' + p)).map(p => `<option value="f:${p}">${p.slice(0, 3)}/${p.slice(3)}</option>`).join('')}${have.has('x:DXY') ? '' : '<option value="x:DXY">DXY شاخص دلار</option>'}</optgroup>` +
+    `<optgroup label="کریپتو">${coins.map(c => `<option value="c:${c.id}">${c.symbol.toUpperCase()} – ${esc(c.name)}</option>`).join('')}</optgroup>`;
+}
+function bindWatch() {
+  $$('#wlTabs button').forEach(b => b.onclick = () => { $$('#wlTabs button').forEach(x => x.classList.remove('active')); b.classList.add('active'); wlGroup = b.dataset.g; renderWatch(); });
+  $('#wlAdd').onchange = e => { const v = e.target.value; if (!v) return; store.set('watch', [...wlList(), v]); fillWlAdd(); renderWatch(); toast('به واچ‌لیست اضافه شد', 'ok'); };
+  $('#wlReset').onclick = () => { store.del('watch'); fillWlAdd(); renderWatch(); };
+  $('#watchlist').onclick = e => {
+    const rm = e.target.closest('[data-rm]'); if (rm) { store.set('watch', wlList().filter(x => x !== rm.dataset.rm)); fillWlAdd(); renderWatch(); return; }
+    const it = e.target.closest('[data-chart]'); if (it) openChart(it.dataset.chart);
+  };
+}
+function moversData() { return (state.wide || state.allMarkets || []).filter(c => c.price_change_percentage_24h != null && !STABLES.has(c.symbol)).sort((a, b) => b.price_change_percentage_24h - a.price_change_percentage_24h); }
+function renderMovers() {
+  const d = moversData(); if (!d.length) return;
+  const li = c => `<li data-chart="${c.symbol.toUpperCase()}USDT"><img src="${c.image}" alt=""><b>${c.symbol.toUpperCase()}</b><small class="muted">${esc(c.name)}</small><span class="num">${fmtPrice(c.current_price)}</span><span class="num ${c.price_change_percentage_24h >= 0 ? 'up' : 'down'}">${c.price_change_percentage_24h >= 0 ? '+' : ''}${fmtNum(c.price_change_percentage_24h, 2)}٪</span></li>`;
+  $('#gainers').innerHTML = d.slice(0, 7).map(li).join(''); $('#losers').innerHTML = d.slice(-7).reverse().map(li).join('');
+}
+
+/* ---- چارت حرفه‌ای شبیه TradingView (Lightweight Charts) با اندیکاتورهای قابل تنظیم ---- */
+const IND_DEF = { MA: ['MA (میانگین ساده)', [20]], EMA: ['EMA (میانگین نمایی)', [21]], BB: ['Bollinger (بولینگر)', [20, 2]], VOL: ['Volume (حجم)', []], RSI: ['RSI', [14]], MACD: ['MACD', [12, 26, 9]] };
+const IND_COLORS = ['#f5b83d', '#a78bfa', '#38bdf8', '#f472b6', '#34d399', '#fb923c', '#e879f9'];
+state.ind = store.get('ind', [{ t: 'MA', p: [20] }, { t: 'MA', p: [50] }, { t: 'BB', p: [20, 2] }, { t: 'VOL', p: [] }, { t: 'RSI', p: [14] }]);
+chartState.tv = false;
+const TZ = -new Date().getTimezoneOffset() * 60;
+const tt = x => Math.floor(x.t / 1000) + TZ;
+let lwc = null;
+function lwcInit() {
+  if (lwc) return true; if (!window.LightweightCharts) return false;
+  const L = LightweightCharts, opt = { autoSize: true, layout: { background: { type: 'solid', color: 'transparent' }, textColor: '#8a9bb8', fontFamily: 'Vazirmatn, Tahoma, sans-serif' },
+    grid: { vertLines: { color: 'rgba(120,140,180,.08)' }, horzLines: { color: 'rgba(120,140,180,.08)' } }, rightPriceScale: { borderColor: '#22324f' },
+    timeScale: { borderColor: '#22324f', timeVisible: true, rightOffset: 6 }, crosshair: { mode: 0 }, localization: { locale: 'en-US' } };
+  const main = L.createChart($('#lwc'), opt), sub = L.createChart($('#lwcSub'), opt);
+  const candle = main.addCandlestickSeries({ upColor: '#22c55e', downColor: '#ef4444', borderVisible: false, wickUpColor: '#22c55e', wickDownColor: '#ef4444' });
+  lwc = { main, sub, candle, over: [], subS: [] };
+  let sync = false; const link = (a, b) => a.timeScale().subscribeVisibleLogicalRangeChange(r => { if (sync || !r) return; sync = true; b.timeScale().setVisibleLogicalRange(r); sync = false; });
+  link(main, sub); link(sub, main);
+  main.subscribeCrosshairMove(p => { const d = chartState.data; const x = p && p.time ? d.find(k => tt(k) === p.time) : d[d.length - 1]; if (x) lwcLegend(x); });
+  return true;
+}
+function lwcLegend(x) {
+  const ch = (x.c / x.o - 1) * 100, sym = $('#chartSymbol').selectedOptions[0];
+  $('#chartLegend').innerHTML = `<b>${esc(sym ? sym.textContent : chartState.symbol)}</b> · <b>${chartState.tf.toUpperCase()}</b> &nbsp; O <span class="num">${fmtNum(x.o, x.o < 1 ? 6 : 2)}</span> H <span class="num">${fmtNum(x.h, x.h < 1 ? 6 : 2)}</span> L <span class="num">${fmtNum(x.l, x.l < 1 ? 6 : 2)}</span> C <span class="num ${ch >= 0 ? 'up' : 'down'}">${fmtNum(x.c, x.c < 1 ? 6 : 2)} (${ch >= 0 ? '+' : ''}${fmtNum(ch, 2)}٪)</span>`;
+}
+function lwcRender(fit) {
+  if (!lwcInit()) return drawChartCanvas();
+  const d = chartState.data; if (!d.length) return;
+  const L = lwc, c = d.map(x => x.c), time = d.map(tt);
+  L.candle.setData(d.map((x, i) => ({ time: time[i], open: x.o, high: x.h, low: x.l, close: x.c })));
+  L.over.forEach(s => L.main.removeSeries(s)); L.subS.forEach(s => L.sub.removeSeries(s)); L.over = []; L.subS = [];
+  const line = (chart, arr, color, w, bag) => { const s = chart.addLineSeries({ color, lineWidth: w, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false }); s.setData(arr.map((v, i) => v == null || !isFinite(v) ? null : { time: time[i], value: v }).filter(Boolean)); bag.push(s); return s; };
+  let hasSub = false;
+  state.ind.forEach((ind, k) => {
+    const col = IND_COLORS[k % IND_COLORS.length], p = ind.p.map(Number);
+    if (ind.t === 'MA') line(L.main, sma(c, p[0]), col, 2, L.over);
+    if (ind.t === 'EMA') line(L.main, ema(c, p[0]), col, 2, L.over);
+    if (ind.t === 'BB') { const b = bollinger(c, p[0], p[1]); line(L.main, b.up, col, 1, L.over); line(L.main, b.mid, col + '88', 1, L.over); line(L.main, b.lo, col, 1, L.over); }
+    if (ind.t === 'VOL') { const s = L.main.addHistogramSeries({ priceScaleId: 'vol', priceFormat: { type: 'volume' }, lastValueVisible: false, priceLineVisible: false }); L.main.priceScale('vol').applyOptions({ scaleMargins: { top: 0.82, bottom: 0 } }); s.setData(d.map((x, i) => ({ time: time[i], value: x.v, color: x.c >= x.o ? 'rgba(34,197,94,.35)' : 'rgba(239,68,68,.35)' }))); L.over.push(s); }
+    if (ind.t === 'RSI') { hasSub = true; const s = line(L.sub, rsi(c, p[0]), col, 2, L.subS); s.createPriceLine({ price: 70, color: '#ef444488', lineStyle: 2, axisLabelVisible: true }); s.createPriceLine({ price: 30, color: '#22c55e88', lineStyle: 2, axisLabelVisible: true }); }
+    if (ind.t === 'MACD') {
+      hasSub = true; const ef = ema(c, p[0]), es = ema(c, p[1]), m = c.map((_, i) => ef[i] != null && es[i] != null ? ef[i] - es[i] : null);
+      const f = m.findIndex(v => v != null), sg = Array(c.length).fill(null); if (f >= 0) ema(m.slice(f), p[2]).forEach((v, j) => sg[f + j] = v);
+      const h = L.sub.addHistogramSeries({ priceLineVisible: false, lastValueVisible: false }); h.setData(m.map((v, i) => v == null || sg[i] == null ? null : { time: time[i], value: v - sg[i], color: v - sg[i] >= 0 ? 'rgba(34,197,94,.5)' : 'rgba(239,68,68,.5)' }).filter(Boolean)); L.subS.push(h);
+      line(L.sub, m, '#38bdf8', 1.5, L.subS); line(L.sub, sg, '#fb923c', 1.5, L.subS);
+    }
+  });
+  $('#lwcSub').hidden = !hasSub;
+  if (fit) L.main.timeScale().setVisibleLogicalRange({ from: Math.max(0, d.length - 160), to: d.length + 6 });
+  lwcLegend(d[d.length - 1]);
+}
+function drawChart() { if (window.LightweightCharts && !chartState.canvas) lwcRender(); else drawChartCanvas(); }
+function liveCandle(sym) {
+  if (sym !== chartState.symbol || chartState.tv) return;
+  const l = state.live[sym], d = chartState.data, last = d[d.length - 1]; if (!l || !last) return;
+  const step = { '1m': 6e4, '5m': 3e5, '15m': 9e5, '1h': 36e5, '4h': 144e5, '1d': 864e5, '1w': 6048e5 }[chartState.tf] || 0;
+  let pushed = false;
+  if (step > 0 && Date.now() >= last.t + step) { d.push({ t: last.t + Math.floor((Date.now() - last.t) / step) * step, o: last.c, h: Math.max(last.c, l.c), l: Math.min(last.c, l.c), c: l.c, v: 0 }); if (d.length > 1500) d.shift(); pushed = true; }
+  else { last.c = l.c; last.h = Math.max(last.h, l.c); last.l = Math.min(last.l, l.c); }
+  if (lwc && !$('#lwc').hidden) { const x = d[d.length - 1]; if (pushed) lwcRender(); else { lwc.candle.update({ time: tt(x), open: x.o, high: x.h, low: x.l, close: x.c }); lwcLegend(x); } }
+  else if (!liveCandle.t || Date.now() - liveCandle.t > 1000) { liveCandle.t = Date.now(); drawChartCanvas(); }
+}
+const TV_STUDY = { MA: 'STD;SMA', EMA: 'STD;EMA', BB: 'STD;Bollinger_Bands', RSI: 'STD;RSI', MACD: 'STD;MACD' };
+function renderTVChart(symbol) {
+  const el = $('#tvChart'); delete el.dataset.loaded;
+  const tfMap = { '1m': '1', '5m': '5', '15m': '15', '1h': '60', '4h': '240', '1d': 'D', '1w': 'W' };
+  const studies = [...new Set(state.ind.map(i => TV_STUDY[i.t]).filter(Boolean))];
+  tvEmbed(el, 'embed-widget-advanced-chart.js', { autosize: true, symbol, interval: tfMap[chartState.tf] || '240', timezone: 'Asia/Tehran', theme: 'dark', style: '1', locale: LANG.cur === 'en' ? 'en' : 'fa_IR', allow_symbol_change: true, studies, withdateranges: true, hide_side_toolbar: false, details: true, support_host: 'https://www.tradingview.com' });
+}
+async function loadChart() {
+  const v = $('#chartSymbol').value; chartState.symbol = v;
+  const tvSym = v.startsWith('TV:') ? v.slice(3) : v === 'OIL' ? 'TVC:USOIL' : null;
+  const useTV = chartState.tv || !!tvSym, lw = !!window.LightweightCharts; chartState.canvas = !lw;
+  $('#lwc').hidden = useTV || !lw; $('#lwcSub').hidden = true;
+  $('#priceCanvas').hidden = useTV || lw; $('#rsiCanvas').hidden = useTV || lw; $('#chartLegend').hidden = useTV; $('#tvChart').hidden = !useTV;
+  $('#tvToggle').textContent = chartState.tv ? 'چارت داخلی سریع' : 'TradingView کامل';
+  $('#tvToggle').hidden = !!tvSym;
+  if (useTV) { renderTVChart(tvSym || (v === 'PAXGUSDT' ? 'OANDA:XAUUSD' : 'BINANCE:' + v)); renderTechSummary(null); return; }
+  try {
+    chartState.data = await klines(v, chartState.tf, 1000);
+    lw ? lwcRender(true) : drawChartCanvas(); renderTechSummary(techSnapshot(chartState.data));
+  } catch (e) { renderTVChart('BINANCE:' + v); $('#tvChart').hidden = false; $('#lwc').hidden = true; $('#chartLegend').hidden = true; }
+}
+function fillChartSymbols() {
+  const sel = $('#chartSymbol'), cur = sel.value || 'BTCUSDT';
+  const cr = [...new Set([...BINANCE_SYMS.map(s => s.replace('USDT', '')), ...(state.allMarkets || []).filter(c => !STABLES.has(c.symbol)).map(c => c.symbol.toUpperCase())])];
+  sel.innerHTML = `<optgroup label="کریپتو">${cr.map(s => `<option value="${s}USDT">${s}/USDT${s === 'PAXG' ? ' (طلا)' : ''}</option>`).join('')}</optgroup>
+  <optgroup label="فلزات">${Object.entries(METALS).map(([s, v]) => `<option value="TV:${v[1]}">${v[0]} ${s}</option>`).join('')}</optgroup>
+  <optgroup label="انرژی"><option value="TV:TVC:USOIL">نفت WTI</option><option value="TV:TVC:UKOIL">نفت برنت</option><option value="TV:NYMEX:NG1!">گاز طبیعی</option></optgroup>
+  <optgroup label="فارکس و شاخص">${FX_PAIRS.map(p => `<option value="TV:FX_IDC:${p}">${p.slice(0, 3)}/${p.slice(3)}</option>`).join('')}<option value="TV:TVC:DXY">DXY شاخص دلار</option><option value="TV:SP:SPX">S&P 500</option><option value="TV:NASDAQ:NDX">نزدک ۱۰۰</option></optgroup>`;
+  if ([...sel.options].some(o => o.value === cur)) sel.value = cur;
+}
+function openChart(sym) {
+  showSection('chart'); const sel = $('#chartSymbol');
+  if (sym.startsWith('TV:FX:')) sym = 'TV:FX_IDC:' + sym.slice(6);
+  if (![...sel.options].some(o => o.value === sym)) { const o = document.createElement('option'); o.value = sym; o.textContent = sym.replace(/^TV:[^:]*:/, '').replace('USDT', '/USDT'); sel.appendChild(o); }
+  sel.value = sym; loadChart();
+}
+function renderIndBar() {
+  $('#indBar').innerHTML = state.ind.map((ind, i) => `<span class="ind-chip" style="--c:${IND_COLORS[i % IND_COLORS.length]}" title="عدد دوره را تغییر دهید یا با ✕ حذف کنید"><b>${ind.t}</b>${ind.p.map((p, j) => `<input value="${p}" data-i="${i}" data-j="${j}" inputmode="decimal" aria-label="دوره">`).join('')}<button data-rm="${i}" title="حذف اندیکاتور">✕</button></span>`).join('') +
+    `<select class="input sm" id="indAdd" title="افزودن اندیکاتور"><option value="">+ اندیکاتور</option>${Object.entries(IND_DEF).map(([k, v]) => `<option value="${k}">${v[0]}</option>`).join('')}</select>`;
+  $$('#indBar input').forEach(inp => inp.onchange = () => { const v = parseFloat(toEn(inp.value)); if (v > 0 && v < 500) { state.ind[+inp.dataset.i].p[+inp.dataset.j] = v; indChanged(); } else inp.value = state.ind[+inp.dataset.i].p[+inp.dataset.j]; });
+  $$('#indBar [data-rm]').forEach(b => b.onclick = () => { state.ind.splice(+b.dataset.rm, 1); indChanged(); });
+  $('#indAdd').onchange = e => { const t = e.target.value; if (!t) return; state.ind.push({ t, p: [...IND_DEF[t][1]] }); indChanged(); };
+}
+function indChanged() { store.set('ind', state.ind); renderIndBar(); if (!$('#tvChart').hidden) loadChart(); else lwcRender(); }
+function bindChart() {
+  fillChartSymbols(); renderIndBar();
+  $('#chartSymbol').onchange = loadChart;
+  $$('#tfSeg button').forEach(b => b.onclick = () => { $$('#tfSeg button').forEach(x => x.classList.remove('active')); b.classList.add('active'); chartState.tf = b.dataset.tf; loadChart(); });
+  $('#tvToggle').onclick = () => { chartState.tv = !chartState.tv; loadChart(); };
+  window.addEventListener('resize', deb(() => { if (!$('#priceCanvas').hidden) drawChartCanvas(); }, 200));
+}
+
+/* ---- ماشین‌حساب ساده ---- */
+function quickCalc() {
+  const n = id => parseFloat(toEn($('#' + id).value).replace(/,/g, '')), type = $('#qType').value, fut = type !== 'spot';
+  $('#qLevWrap').hidden = !fut;
+  const entry = n('qEntry'), exit = n('qExit'), lev = fut ? Math.max(1, n('qLev') || 1) : 1, fee = 0.001, dir = type === 'short' ? -1 : 1;
+  let amt = n('qAmt'); const irtIn = $('#qAmtCur').value === 'irt'; if (irtIn) amt = amt / state.rate;
+  const box = $('#qResult');
+  if (!(amt > 0)) { box.innerHTML = '<p class="warn">مبلغ سرمایه را وارد کنید.</p>'; return; }
+  if (!(entry > 0)) { box.innerHTML = '<p class="warn">قیمت ورود را وارد کنید (با انتخاب ارز خودکار پر می‌شود).</p>'; return; }
+  const qty = amt * lev / entry, notional = qty * entry, coin = $('#qCoin').value;
+  const feeIn = notional * fee, feeOut = exit > 0 ? qty * exit * fee : 0;
+  const both = v => `${fmtUsd(v)} <small class="muted">≈ ${fmtIrt(v * state.rate)}</small>`;
+  const liq = fut ? entry * (1 - dir / lev) : null, be = entry * (1 + dir * 2 * fee);
+  let html = '';
+  if (exit > 0) {
+    const gross = dir * (exit - entry) * qty, pnl = gross - feeIn - feeOut, pct = pnl / amt * 100;
+    const liqHit = fut && ((dir === 1 && exit <= liq) || (dir === -1 && exit >= liq));
+    html += `<div class="big-pnl ${pnl >= 0 ? 'up' : 'down'}">${pnl >= 0 ? 'سود' : 'ضرر'}: ${fmtUsd(Math.abs(liqHit ? amt : pnl))}<small>${fmtIrt(Math.abs(liqHit ? amt : pnl) * state.rate)} · ${liqHit ? '−۱۰۰' : (pct >= 0 ? '+' : '') + fmtNum(pct, 2)}٪ سرمایه</small></div>`;
+    if (liqHit) html += '<p class="warn">⚠️ قیمت خروج از قیمت لیکوییدیشن عبور می‌کند؛ کل سرمایه این پوزیشن از دست می‌رود.</p>';
+    html += `<div class="kv2"><span>تغییر قیمت</span><b class="num">${fmtNum((exit / entry - 1) * 100, 2)}٪</b><span>ارزش در خروج</span><b class="num">${both(amt + (liqHit ? -amt : pnl))}</b></div>`;
+  } else html += '<p class="muted">قیمت خروج را وارد کنید یا یکی از دکمه‌های «خروج سریع» را بزنید.</p>';
+  html += `<div class="kv2"><span>مقدار ${esc(coin)}</span><b class="num">${fmtNum(qty, qty < 1 ? 6 : 4)}</b><span>ارزش پوزیشن${fut ? ` (×${lev})` : ''}</span><b class="num">${both(notional)}</b>
+    <span>کارمزد کل</span><b class="num">${both(feeIn + feeOut)}</b><span>قیمت سر‌به‌سر</span><b class="num">${fmtUsd(be)}</b>${fut ? `<span>لیکوییدیشن تقریبی</span><b class="num down">${fmtUsd(liq)}</b>` : ''}</div>
+    <p class="hint">${type === 'spot' ? 'سود = (خروج − ورود) × مقدار − کارمزد' : type === 'long' ? 'سود = (خروج − ورود) × مقدار × اهرم − کارمزد' : 'سود = (ورود − خروج) × مقدار × اهرم − کارمزد'}${irtIn ? ` · مبلغ تومانی با نرخ ${fmtNum(state.rate, 0)} تبدیل شد` : ''}</p>`;
+  box.innerHTML = html;
+}
+function qcFillPrice() { const p = priceOf($('#qCoin').value); if (p) $('#qEntry').value = +p.toPrecision(6); quickCalc(); }
+function bindQuickCalc() {
+  const sel = $('#qCoin'); const syms = [...new Set([...BINANCE_SYMS.map(s => s.replace('USDT', '')), ...(state.allMarkets || []).filter(c => !STABLES.has(c.symbol)).map(c => c.symbol.toUpperCase())])];
+  sel.innerHTML = syms.map(s => `<option value="${s}">${s}${s === 'PAXG' ? ' (طلا)' : ''}</option>`).join('');
+  sel.onchange = qcFillPrice;
+  ['qType', 'qAmt', 'qAmtCur', 'qLev', 'qEntry', 'qExit'].forEach(id => $('#' + id).addEventListener('input', quickCalc));
+  $$('#qPct button').forEach(b => b.onclick = () => { const e = parseFloat(toEn($('#qEntry').value)); if (!e) return qcFillPrice(); const dir = $('#qType').value === 'short' ? -1 : 1; $('#qExit').value = +(e * (1 + dir * b.dataset.p / 100)).toPrecision(6); quickCalc(); });
+  $$('#calcModeSeg button').forEach(b => b.onclick = () => { $$('#calcModeSeg button').forEach(x => x.classList.remove('active')); b.classList.add('active'); const adv = b.dataset.m === 'adv'; $('#calcSimple').hidden = adv; $('#calcAdv').hidden = !adv; store.set('calcMode', b.dataset.m); if (adv && !parseFloat($('#cEntry').value)) { const p = priceOf($('#cCoin').value); if (p) { $('#cEntry').value = +p.toPrecision(6); renderCalc(); } } });
+  if (store.get('calcMode') === 'adv') $('#calcModeSeg [data-m="adv"]').click();
+  const q = $('#cQty'); if (q) q.placeholder = 'خالی = خودکار بر اساس ریسک٪';
+  qcFillPrice();
+}
+document.addEventListener('input', e => { const t = e.target; if (t && t.inputMode === 'decimal') { const v = toEn(t.value).replace(/[٫,]/g, '.'); if (v !== t.value) t.value = v; } }, true);
+
+/* ---- مشاور: پاسخ همیشگی و هوشمندتر ---- */
+function marketBrief() {
+  try {
+    const b = state.byId.bitcoin, r = state.regime, f = state.fng && state.fng[0];
+    return `📌 <b>خلاصه بازار:</b> بیت‌کوین ${b ? fmtUsd(livePriceFor(b)) + ` (${fmtNum(liveChgFor(b), 2)}٪)` : '—'} · رژیم: ${r ? esc(r.label) : '—'} · ترس و طمع: ${f ? toFa(f.value) : '—'} · دامیننس: ${state.global ? fmtNum(state.global.market_cap_percentage.btc, 1) + '٪' : '—'} · طلا: ${state.gold ? fmtUsd(state.gold) : '—'} · دلار: ${fmtNum(state.rate, 0)} ت`;
+  } catch { return ''; }
+}
+function moversText() {
+  const d = moversData(); if (!d.length) return 'داده رشد/افت هنوز دریافت نشده است.';
+  const row = c => `• ${c.symbol.toUpperCase()} ${fmtUsd(c.current_price)} <span class="${c.price_change_percentage_24h >= 0 ? 'up' : 'down'}">${fmtNum(c.price_change_percentage_24h, 2)}٪</span>`;
+  return `<b>🚀 بیشترین رشد ۲۴ ساعت:</b><br>${d.slice(0, 5).map(row).join('<br>')}<br><b>📉 بیشترین افت:</b><br>${d.slice(-5).reverse().map(row).join('<br>')}<br><small class="muted">رشد شدید کوتاه‌مدت معمولاً با اصلاح همراه است؛ بدون استاپ‌لاس وارد نشوید.</small>`;
+}
+function goldText() {
+  const o = state.gold; if (!o) return 'قیمت طلا هنوز دریافت نشده است.';
+  const g18 = o / 31.1035 * 0.75 * state.rate;
+  return `🥇 <b>طلا:</b> انس جهانی ${fmtUsd(o)}${state.metals.XAU && state.metals.XAU.chg != null ? ` (${fmtNum(state.metals.XAU.chg, 2)}٪ امروز)` : ''}<br>• ارزش ریالی انس: ${fmtIrt(o * state.rate)}<br>• هر گرم طلای ۱۸ عیار (محاسبه‌ای از انس و دلار، بدون حباب و اجرت): <b>${fmtIrt(g18)}</b><br>• نقره: ${state.metals.XAG ? fmtUsd(state.metals.XAG.p) : '—'}<br><small class="muted">برای چارت طلا: بخش چارت ← فلزات ← طلا.</small>`;
+}
+async function localAnswer(q) {
+  const t = normFa(q), coin = detectCoin(t);
+  if (/^(سلام|درود|hi|hello|hey|خوبی|وقت بخیر|صبح بخیر|عصر بخیر)/.test(t)) return `سلام! 👋 من مشاور هوش‌مانیتور هستم.<br>${marketBrief()}<br><br>مثلاً بپرسید: «الان چی بخرم؟»، «سولانا را تحلیل کن»، «قیمت طلا»، «با ۲۰ میلیون تومان سبد بچین».`;
+  if (/(طلا|انس|gold|نقره|سکه)/.test(t) && !/paxg/.test(t)) return goldText();
+  if (!coin && /(رشد|گینر|افت|ریزش|بیشترین|کمترین)/.test(t)) return moversText();
+  if (!coin && /(دلار|تتر|usdt)/.test(t) && !/\d/.test(t)) return `💵 نرخ دلار (تتر): <b>${fmtNum(state.rate, 0)} تومان</b> ${state.rateLive ? '– لحظه‌ای از ' + state.rateName : '(نرخ ذخیره‌شده/دستی)'}`;
+  if (!coin && /(چی|چه|کدوم|کدام|کدوم ارز|کجا).*(بخرم|بخریم|خوبه|بهتره|سرمایه)|الان چی|پیشنهاد|خرید خوب/.test(t)) return `${marketBrief()}<br><br>${signalsText()}`;
+  let a = '';
+  try { a = await localAnswerBase(q); } catch (e) { a = ''; }
+  if (!a || a.startsWith('می‌توانم این‌ها را جواب بدهم')) return `${marketBrief()}<br><br>${a || ''}`;
+  return a;
+}
+async function ask(q) {
+  q = (q || '').trim(); if (!q) return;
+  addMsg(esc(q), 'user'); const wait = addMsg('در حال تحلیل…', 'bot typing');
+  const lim = (p, ms) => Promise.race([p, new Promise((_, rj) => setTimeout(() => rj(new Error('timeout')), ms))]);
+  let ans;
+  try { ans = state.keys.openai ? await lim(openAIAnswer(q), 30000) : await lim(localAnswer(q), 15000); }
+  catch {
+    try { ans = (state.keys.openai ? '<small class="muted">OpenAI پاسخ نداد؛ پاسخ تحلیل‌گر داخلی:</small><br>' : '') + await lim(localAnswer(q), 15000); }
+    catch { ans = marketBrief() + '<br><small class="muted">دریافت داده کامل برای این سؤال ممکن نشد؛ چند ثانیه بعد دوباره بپرسید.</small>'; }
+  }
+  wait.classList.remove('typing'); wait.innerHTML = ans || 'پاسخی پیدا نشد؛ سؤال را ساده‌تر بپرسید.'; $('#chatLog').scrollTop = 1e9;
+}
+
+/* ---- خلاصه فارسی خبر با نگه‌داشتن ماوس ---- */
+function bindNewsPop() {
+  const pop = document.createElement('div'); pop.id = 'newsPop'; pop.hidden = true; document.body.appendChild(pop);
+  let cur = null;
+  const show = async li => {
+    const idx = [...li.parentNode.children].indexOf(li), n = state.news[idx]; if (!n) return; cur = li;
+    const r = li.getBoundingClientRect(); pop.style.top = Math.min(window.innerHeight - 220, r.bottom + 6) + 'px'; pop.style.left = Math.max(8, Math.min(window.innerWidth - 380, r.left)) + 'px';
+    pop.hidden = false; pop.innerHTML = '<small class="muted">در حال ترجمه و خلاصه‌سازی…</small>';
+    const sents = (n.desc || '').split(/(?<=[.!?])\s+/).filter(s => s.length > 20 && s !== n.title).slice(0, 2).join(' ');
+    try {
+      const [ti, su] = await Promise.all([translate(n.title), sents ? translate(sents) : Promise.resolve('')]);
+      if (cur !== li) return;
+      pop.innerHTML = `<b>${esc(ti)}</b>${su ? `<p>${esc(su)}</p>` : ''}<small class="muted">${esc(n.src)} · ${timeAgo(n.t)} · جو خبر: <span class="${n.s > 0 ? 'up' : n.s < 0 ? 'down' : ''}">${n.s > 0 ? 'مثبت' : n.s < 0 ? 'منفی' : 'خنثی'}</span> · ترجمه ماشینی</small>`;
+    } catch { if (cur === li) pop.innerHTML = '<small class="muted">ترجمه در دسترس نیست.</small>'; }
+  };
+  const list = $('#newsList');
+  list.addEventListener('mouseover', e => { const li = e.target.closest('li'); if (li && li !== cur && !li.classList.contains('muted')) show(li); });
+  list.addEventListener('mouseleave', () => { cur = null; pop.hidden = true; });
+  list.addEventListener('touchstart', e => { const li = e.target.closest('li'); if (li && li !== cur) show(li); }, { passive: true });
+}
+
+/* ---- زبان انگلیسی (ترجمه خودکار رابط) ---- */
+const FA_RE = /[\u0600-\u06FF]/; const trQ = new Map(); let trTimer;
+function queueTr(node, prop) {
+  const v0 = prop === 'nodeValue' ? node.nodeValue : node.getAttribute(prop); const pre = (v0 || '').match(/^[^\p{L}\p{N}]*/u)[0], v = (v0 || '').slice(pre.length); const s = v.trim(); if (!s) return;
+  const set = t => { const val = pre + v.match(/^\s*/)[0] + t + v.match(/\s*$/)[0]; prop === 'nodeValue' ? node.nodeValue = val : node.setAttribute(prop, val); };
+  if (trCache['en:' + s]) return set(trCache['en:' + s]);
+  if (!trQ.has(s)) trQ.set(s, []); trQ.get(s).push(set); clearTimeout(trTimer); trTimer = setTimeout(flushTr, 200);
+}
+function trWalk(root) {
+  if (root.nodeType === 3) { if (FA_RE.test(root.nodeValue)) queueTr(root, 'nodeValue'); return; }
+  if (root.nodeType !== 1 || root.closest('script,style,.no-tr')) return;
+  const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT);
+  for (let n = root; n; n = w.nextNode()) {
+    if (n.nodeType === 3) { if (FA_RE.test(n.nodeValue) && !n.parentElement.closest('script,style')) queueTr(n, 'nodeValue'); }
+    else ['placeholder', 'title', 'aria-label'].forEach(a => { if (FA_RE.test(n.getAttribute(a) || '')) queueTr(n, a); });
+  }
+}
+async function flushTr() {
+  const keys = [...trQ.keys()]; let batch = [], len = 0;
+  const run = async b => {
+    try {
+      const d = await getJSON('https://translate.googleapis.com/translate_a/single?client=gtx&sl=fa&tl=en&dt=t&q=' + encodeURIComponent(b.map(k => k.replace(/\n+/g, ' ')).join('\n')), {}, 15000);
+      const out = (d[0] || []).map(s => s[0]).join('').split('\n');
+      b.forEach((k, i) => { const t = (out[i] || '').trim(); if (t) { trCache['en:' + k] = t; (trQ.get(k) || []).forEach(f => f(t)); } trQ.delete(k); });
+      saveTr();
+    } catch { b.forEach(k => trQ.delete(k)); }
+  };
+  for (const k of keys) { if (len + k.length > 1400 && batch.length) { await run(batch); batch = []; len = 0; } batch.push(k); len += k.length + 1; }
+  if (batch.length) await run(batch);
+}
+const EN_FIX = { 'داشبورد بازار': 'Market Dashboard', 'چارت و اندیکاتور': 'Chart & Indicators', 'مشاور هوش مصنوعی': 'AI Advisor', 'ماشین‌حساب حرفه‌ای': 'Pro Calculator', 'سبد، سیگنال و پیش‌بینی': 'Portfolio, Signals & Forecast', 'صرافی و ترید آزمایشی': 'Exchange & Paper Trading', 'هشدارها و تلگرام': 'Alerts & Telegram', 'ژورنال معاملاتی': 'Trading Journal', 'بک‌تست و کارنامه': 'Backtest & Report Card', 'آن‌چین و سنتیمنت': 'On-chain & Sentiment', 'گزارش PDF هفتگی': 'Weekly PDF Report', 'تنظیمات': 'Settings', 'هوش‌مانیتور پرو': 'HooshMonitor Pro', 'انس طلا': 'Gold (oz)', 'ترس و طمع': 'Fear & Greed', 'دلار': 'USD', 'تومان': 'Toman', 'اخبار لحظه‌ای': 'Live News', 'واچ‌لیست من': 'My Watchlist', 'ساده': 'Simple', 'پیشرفته (مدیریت ریسک)': 'Advanced (risk management)', 'نقره': 'Silver', 'فلزات': 'Metals', 'فارکس': 'Forex', 'کریپتو': 'Crypto', 'همه': 'All', 'پیش‌فرض': 'Default' };
+Object.entries(EN_FIX).forEach(([k, v]) => trCache['en:' + k] = v);
+function applyLang() {
+  const en = LANG.cur === 'en';
+  document.documentElement.lang = en ? 'en' : 'fa'; document.documentElement.dir = en ? 'ltr' : 'rtl';
+  $('#langBtn').textContent = en ? 'فا' : 'EN';
+  if (!en) return;
+  trWalk(document.body); document.title = 'HooshMonitor Pro';
+  new MutationObserver(ms => ms.forEach(m => m.type === 'characterData' ? (FA_RE.test(m.target.nodeValue) && queueTr(m.target, 'nodeValue')) : m.addedNodes.forEach(trWalk)))
+    .observe(document.body, { subtree: true, childList: true, characterData: true });
+}
+
+/* ---- راهنما، توضیح اصطلاحات و تور ---- */
+const SEC_HELP = {
+  dash: 'نمای کلی بازار: واچ‌لیست شخصی (کریپتو، فلزات، فارکس)، بیشترین رشد و افت، جریان نقدینگی، هشدارها و اخبار. روی هر خبر ماوس را نگه دارید تا خلاصه فارسی ببینید.',
+  chart: 'نماد و تایم‌فریم (1m تا 1W) را انتخاب کنید. اندیکاتور را با «+ اندیکاتور» اضافه کنید، عدد دوره را تغییر دهید یا با ✕ حذف کنید. با اسکرول زوم و با کشیدن جابه‌جا کنید.',
+  advisor: 'سؤالتان را فارسی و ساده بپرسید؛ مثلاً «الان چی بخرم؟»، «سولانا را تحلیل کن»، «قیمت طلا» یا «با ۲۰ میلیون تومان سبد بچین».',
+  calc: 'حالت ساده: ارز، مبلغ و قیمت خروج را بدهید تا سود دلاری و تومانی را ببینید. حالت پیشرفته: استاپ‌لاس، ریسک٪ و حجم خودکار طبق قانون مدیریت سرمایه.',
+  forecast: '۵ پیشنهاد روز با محدوده ورود، استاپ و تارگت، سبد سه‌سطحی و سناریوی قیمت تا ۲۰۳۰. اینها تحلیل الگوریتمی است، نه توصیه مالی.',
+  trade: 'خرید و فروش آزمایشی با پول مجازی برای تمرین بدون ریسک. کلیدهای صرافی فقط در مرورگر خود شما ذخیره می‌شود.',
+  alerts: 'برای قیمت هر ارز هشدار بگذارید؛ هنگام رسیدن قیمت، آلارم صوتی، نوتیف مرورگر و پیام تلگرام دریافت می‌کنید (تا وقتی صفحه باز است).',
+  journal: 'هر ترید را با دلیل ورود، احساس و عکس چارت ثبت کنید تا از اشتباهات یاد بگیرید. خروجی CSV و چاپ دارد.',
+  backtest: 'یک استراتژی را روی داده‌های گذشته امتحان کنید و وین‌ریت، میانگین سود و بیشترین افت سرمایه را ببینید.',
+  onchain: 'شاخص‌های زنجیره (MVRV، جریان صرافی‌ها، ماینرها) و جو اخبار. عدد سبز یعنی شرایط مثبت و قرمز یعنی احتیاط.',
+  report: 'گزارش هفتگی آماده چاپ یا ذخیره PDF با لوگو و آمار سبد.',
+  settings: 'نرخ دلار (خودکار یا دستی)، کلیدها، قوانین هشدار و پشتیبان‌گیری. زبان را از دکمه EN/فا بالای صفحه عوض کنید.'
+};
+const GLOSS = {
+  'Funding': 'نرخ تأمین مالی: مثبت یعنی لانگ‌ها به شورت‌ها کارمزد می‌دهند (بازار خوش‌بین/شلوغ).', 'Open Interest': 'مجموع قراردادهای باز فیوچرز؛ افزایش آن یعنی ورود پول جدید.',
+  'RSI': 'شاخص قدرت نسبی: بالای ۷۰ اشباع خرید، زیر ۳۰ اشباع فروش.', 'MVRV': 'نسبت ارزش بازار به ارزش تحقق‌یافته؛ بالای ۳ معمولاً سقف، زیر ۱ معمولاً کف.',
+  'DXY': 'شاخص دلار آمریکا؛ دلار قوی معمولاً برای کریپتو و طلا منفی است.', 'دامیننس': 'سهم بیت‌کوین از کل بازار کریپتو؛ کاهش آن معمولاً یعنی فصل آلت‌کوین.',
+  'ترس و طمع': 'شاخص احساسات ۰ تا ۱۰۰؛ ترس شدید اغلب فرصت خرید و طمع شدید زمان احتیاط است.', 'لیکوییدیشن': 'قیمتی که پوزیشن اهرمی شما خودکار بسته و سرمایه از دست می‌رود.',
+  'ریوارد به ریسک': 'نسبت سود احتمالی به ضرر احتمالی؛ بالای ۱٫۵ تا ۲ مناسب است.', 'استاپ': 'حد ضرر: قیمتی که در آن برای جلوگیری از ضرر بیشتر خارج می‌شوید.',
+  'اهرم': 'ضریب بزرگ‌کردن پوزیشن؛ سود و ضرر را چند برابر می‌کند.', 'بولینگر': 'باندهای نوسان دور میانگین ۲۰؛ برخورد به باند بالا/پایین یعنی قیمت از میانگین دور شده.',
+  'EMA': 'میانگین متحرک نمایی؛ قیمت بالای EMA یعنی روند صعودی.', 'ATR': 'میانگین دامنه نوسان؛ برای تعیین فاصله استاپ.', 'وین‌ریت': 'درصد معاملات سودده.',
+  'افت سرمایه': 'بیشترین کاهش حساب از سقف قبلی (Drawdown).', 'نهنگ': 'کیف‌پول یا تراکنش بسیار بزرگ که می‌تواند بازار را جابه‌جا کند.', 'MACD': 'اختلاف دو میانگین نمایی؛ عبور از خط سیگنال نشانه تغییر مومنتوم.'
+};
+function applyGlossary(root) {
+  root.querySelectorAll('small,span,th,h3,h4,label,b,dt').forEach(el => {
+    if (el.dataset.gl || el.children.length > 2) return; const tx = el.textContent; if (tx.length > 50) return;
+    for (const k in GLOSS) if (tx.includes(k)) { el.title = GLOSS[k]; el.classList.add('gl'); el.dataset.gl = 1; break; }
+  });
+}
+function addSectionHelp() {
+  Object.entries(SEC_HELP).forEach(([id, txt]) => {
+    const sec = $('#sec-' + id); if (!sec || store.get('hideHelp_' + id)) return;
+    const d = document.createElement('div'); d.className = 'sec-help no-print'; d.innerHTML = `<span>💡 ${txt}</span><button class="link">متوجه شدم ✕</button>`;
+    d.querySelector('button').onclick = () => { d.remove(); store.set('hideHelp_' + id, 1); }; sec.prepend(d);
+  });
+}
+const TOUR = [
+  ['dash', '👋 به هوش‌مانیتور پرو خوش آمدید! این صفحه نمای کلی بازار است. واچ‌لیست بالای صفحه را با «افزودن» شخصی کنید؛ بیشترین رشد و افت خودکار نمایش داده می‌شود.'],
+  ['chart', '📈 چارت حرفه‌ای: نماد و تایم‌فریم را انتخاب کنید، اندیکاتور اضافه، تنظیم یا حذف کنید. «TradingView کامل» همه ابزارهای رسم را می‌دهد.'],
+  ['advisor', '🤖 هر سؤالی دارید فارسی بپرسید؛ مثلاً «الان چی بخرم؟» یا «با ۱۰ میلیون تومان سبد بچین».'],
+  ['calc', '🧮 ماشین‌حساب ساده: فقط ارز، مبلغ و قیمت خروج را بدهید تا سود یا ضرر دلاری و تومانی را ببینید.'],
+  ['forecast', '🎯 هر روز ۵ پیشنهاد معاملاتی با ورود، استاپ و تارگت، به‌همراه سبد سه‌سطحی و پیش‌بینی تا ۲۰۳۰.'],
+  ['alerts', '🔔 برای هر قیمتی هشدار بگذارید. اصطلاحات نقطه‌چین را با ماوس نگه دارید تا توضیح ببینید. راهنما همیشه از دکمه «؟» بالای صفحه در دسترس است.']
+];
+function startTour(i = 0) {
+  let el = $('#tour');
+  if (i >= TOUR.length) { el && el.remove(); store.set('toured', 1); showSection('dash'); return; }
+  showSection(TOUR[i][0]);
+  if (!el) { el = document.createElement('div'); el.id = 'tour'; document.body.appendChild(el); }
+  el.innerHTML = `<div class="tour-box"><div class="tour-step">${toFa(i + 1)} از ${toFa(TOUR.length)}</div><p>${TOUR[i][1]}</p><div class="row gap"><button class="btn" id="tourNext">${i === TOUR.length - 1 ? 'شروع کار' : 'بعدی ←'}</button><button class="btn ghost" id="tourSkip">رد شدن</button></div></div>`;
+  $('#tourNext').onclick = () => startTour(i + 1); $('#tourSkip').onclick = () => startTour(TOUR.length);
+}
+
+async function init2() {
+  applyLang();
+  $('#langBtn').onclick = () => { store.set('lang', LANG.cur === 'en' ? 'fa' : 'en'); location.reload(); };
+  $('#helpBtn').onclick = () => startTour(0);
+  bindWatch(); bindNewsPop(); addSectionHelp(); renderWatch();
+  const gl = deb(() => applyGlossary($('#main')), 700); gl(); new MutationObserver(gl).observe($('#main'), { childList: true, subtree: true });
+  $('#tableSize').onchange = async e => {
+    state.tableSize = +e.target.value; if (state.tableSize > 50 && !state.wide) await safe(loadWide);
+    state.markets = (state.tableSize > 50 && state.wide ? state.wide : (state.allMarkets || []).filter(c => !STABLES.has(c.symbol))).slice(0, state.tableSize); renderTable();
+  };
+  if (!store.get('toured')) setTimeout(() => startTour(0), 3000);
+  const until = Date.now() + 30000; while (!(state.allMarkets && state.allMarkets.length) && Date.now() < until) await new Promise(r => setTimeout(r, 500));
+  bindQuickCalc(); fillChartSymbols();
+  renderMovers();
+  await Promise.all([safe(loadMetals), safe(loadFxAll), safe(loadRate)]);
+  renderRate(); renderWatch(); fillWlAdd();
+  setTimeout(async () => { await safe(loadWide); renderMovers(); fillWlAdd(); }, 8000);
+  setInterval(async () => { await safe(loadRate); renderRate(); }, 60e3);
+  setInterval(async () => { await Promise.all([safe(loadWide), safe(loadMetals)]); renderMovers(); fillWlAdd(); }, 300e3);
+  setInterval(renderWatch, 3000);
+}
+document.addEventListener('DOMContentLoaded', init2);
